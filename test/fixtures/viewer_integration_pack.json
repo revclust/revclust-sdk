@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0.0",
+  "capture_id": "cap_sdk_viewer_integration_20260309",
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "trigger": {
+    "type": "programmatic",
+    "reason": "checkout confirmation mismatch",
+    "trigger_utc_ms": 1773057600123,
+    "trigger_mono_ms": 4100,
+    "expected": {
+      "order_status": "confirmed",
+      "screen": "confirmation"
+    },
+    "observed": {
+      "order_status": "retrying",
+      "screen": "checkout"
+    },
+    "signature": "checkout_confirmation_mismatch"
+  },
+  "conditions": {
+    "app_version": "3.1.0",
+    "build": "31042",
+    "device_model": "Pixel 9 Pro",
+    "os_version": "Android 16",
+    "network_type": "wifi",
+    "update_context": {
+      "is_first_run_after_update": true,
+      "prev_app_version": "3.0.9",
+      "install_type": "update"
+    }
+  },
+  "timeline": [
+    {
+      "event_type": "ui.intent",
+      "t_mono_ms": 3700,
+      "cta": "place_order",
+      "name": "checkout.submit",
+      "surface": "confirm_order"
+    },
+    {
+      "event_type": "ui.intent",
+      "t_mono_ms": 3800,
+      "attempt": 2,
+      "name": "checkout.retry_prompt_shown",
+      "surface": "error_banner"
+    },
+    {
+      "event_type": "network",
+      "t_mono_ms": 3900,
+      "duration_ms": 812,
+      "errorMessage": "gateway timeout while confirming order",
+      "errorType": "timeout",
+      "method": "POST",
+      "routeTemplate": "/api/orders/:orderId/confirm",
+      "sanitizedPath": "/api/orders/{id}/confirm",
+      "status": 503
+    }
+  ],
+  "state_snapshot": {
+    "app_state": {
+      "retry_banner_visible": true,
+      "screen": "checkout",
+      "step": "confirm"
+    },
+    "data_state": {
+      "cart_count": 2,
+      "order_id": "sha256:a535bc9674a3b9b336083a306d0d0105a031ded833467e54bc65e6e1b24121f7"
+    }
+  },
+  "missing_fields": [
+    "conditions.git_sha",
+    "conditions.quality",
+    "conditions.rtt_bucket"
+  ],
+  "truncation": {
+    "truncated": true,
+    "dropped_counts_by_type": {
+      "ui.screen_transition": 1
+    },
+    "dropped_bytes": 84
+  }
+}

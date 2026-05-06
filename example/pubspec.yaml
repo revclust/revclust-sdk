@@ -1,0 +1,26 @@
+name: revclust_flutter_sdk_example
+description: "Hosted-first quickstart app for revclust_flutter_sdk."
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.7.2 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  dio: ^5.4.3+1
+  flutter:
+    sdk: flutter
+  revclust_flutter_sdk:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

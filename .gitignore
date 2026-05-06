@@ -1,0 +1,16 @@
+# Flutter / Dart local artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+pubspec.lock
+
+# Local scratch artifacts
+flutter_*.log
+
+# Example app local artifacts
+example/.metadata
+example/pubspec.lock
+example/android/local.properties
+example/android/*.iml
+example/*.iml

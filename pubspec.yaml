@@ -1,0 +1,29 @@
+name: revclust_flutter_sdk
+description: Flutter SDK for integrating a Flutter app with Revclust hosted incident capture.
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  connectivity_plus: ^7.0.0
+  device_info_plus: ^10.1.2
+  flutter:
+    sdk: flutter
+  cryptography: ^2.7.0
+  dio: ^5.4.3+1
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.3.2
+  sqflite: ^2.3.3+1
+  sqflite_common_ffi: ^2.3.3
+  sqlite3: ^2.9.4
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
