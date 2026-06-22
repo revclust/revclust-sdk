@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 import "package:revclust_flutter_sdk/src/update_context/session_state_store.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
@@ -93,6 +93,32 @@ void main() {
     );
   });
 
+  test("initializeUpdateContext does not mutate session-exit state", () async {
+    final int checkpointMs = DateTime.now().millisecondsSinceEpoch - 500;
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      revclustCleanShutdownStorageKey: true,
+      revclustLastCheckpointTimestampMsStorageKey: checkpointMs,
+    });
+    final RevclustSdk sdk = RevclustSdk(
+      config: SdkConfig(appVersion: "1.0.0"),
+    );
+
+    final UpdateContextSnapshot snapshot = await sdk.initializeUpdateContext();
+
+    expect(snapshot.installType, UpdateContextSnapshot.installTypeFreshInstall);
+
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getString(revclustLastSeenAppVersionStorageKey),
+      "1.0.0",
+    );
+    expect(prefs.getBool(revclustCleanShutdownStorageKey), isTrue);
+    expect(
+      prefs.getInt(revclustLastCheckpointTimestampMsStorageKey),
+      checkpointMs,
+    );
+  });
+
   test("persisted app version is written and updated using init override",
       () async {
     final RevclustSdk firstSdk = RevclustSdk(config: SdkConfig());
@@ -128,6 +154,10 @@ void main() {
     final RevclustSdk sdk = RevclustSdk(config: SdkConfig());
     expect(
       () => sdk.initialize(appVersion: "   "),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => sdk.initializeUpdateContext(appVersion: "   "),
       throwsA(isA<ArgumentError>()),
     );
     expect(

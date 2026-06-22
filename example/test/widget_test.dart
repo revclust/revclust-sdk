@@ -12,7 +12,7 @@ void main() {
     expect(find.text("Revclust Hosted Quickstart"), findsOneWidget);
     expect(
       find.text(
-        "Provide REVCLUST_PROJECT_KEY and REVCLUST_ENVIRONMENT via --dart-define to enable the quickstart flow.",
+        "Provide REVCLUST_PROJECT_KEY via --dart-define to enable the quickstart flow.",
       ),
       findsOneWidget,
     );

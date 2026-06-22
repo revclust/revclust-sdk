@@ -1,4 +1,4 @@
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 import "package:revclust_flutter_sdk/src/update_context/session_state_store.dart";
 
 const String viewerIntegrationFixtureCaptureId =
@@ -13,6 +13,7 @@ Future<PackBuildResult> buildViewerIntegrationFixturePack() async {
     config: SdkConfig(
       appVersion: "3.1.0",
       build: "31042",
+      appReleaseStage: "staging",
       stateHashSalt: "viewer-integration-salt",
     ),
     monotonicClockMs: () => 4100,
@@ -144,6 +145,7 @@ PackBuildRequest _copyRequest(
     deviceModel: request.deviceModel,
     osVersion: request.osVersion,
     networkType: request.networkType,
+    appReleaseStage: request.appReleaseStage,
     rttBucket: request.rttBucket,
     quality: request.quality,
     gitSha: request.gitSha,

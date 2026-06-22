@@ -1,19 +1,7 @@
-export "src/config/sdk_config.dart";
-export "src/core/revclust_sdk.dart";
-export "src/capture/capture_envelope.dart";
-export "src/capture/capture_trigger.dart";
-export "src/checkpoint/checkpoint_coordinator.dart";
-export "src/events/timeline_event.dart";
-export "src/network/revclust_dio_interceptor.dart";
-export "src/observability/sdk_logger.dart";
-export "src/pack/pack_builder.dart";
-export "src/pack/pack_build_failure.dart";
-export "src/pack/pack_build_request.dart";
-export "src/pack/pack_build_result.dart";
-export "src/persistence/aes_gcm_encryption_service.dart";
-export "src/persistence/key_store.dart";
-export "src/persistence/local_pack_repository.dart";
-export "src/runtime/runtime_conditions.dart";
-export "src/state/state_snapshot.dart";
-export "src/timeline/ring_buffer.dart";
-export "src/update_context/update_context_snapshot.dart";
+/// Partner-facing Revclust Flutter SDK entrypoint.
+///
+/// Prefer importing `revclust_flutter.dart` in app code. This compatibility
+/// entrypoint intentionally exposes the same facts-first public facade.
+library;
+
+export "revclust_flutter.dart";

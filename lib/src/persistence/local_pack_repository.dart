@@ -45,115 +45,77 @@ final class LocalPackQueueState {
 class LocalPendingCaptureMetadata {
   LocalPendingCaptureMetadata({
     required String captureId,
-    required String identityKind,
-    required String identityValue,
-    String? flow,
-    String? screen,
-    String? stepLabel,
-    String? reproHint,
-    Map<String, String> relevantIds = const <String, String>{},
+    required String failureKind,
+    required String subjectKind,
+    required String subjectValue,
   })  : captureId = LocalPackRepository._normalizeRequiredString(
             captureId, "captureId"),
-        identityKind = LocalPackRepository._normalizeRequiredString(
-          identityKind,
-          "identityKind",
+        failureKind = LocalPackRepository._normalizeRequiredString(
+          failureKind,
+          "failureKind",
         ),
-        identityValue = LocalPackRepository._normalizeRequiredString(
-          identityValue,
-          "identityValue",
+        subjectKind = LocalPackRepository._normalizeRequiredString(
+          subjectKind,
+          "subjectKind",
         ),
-        flow = LocalPackRepository._normalizeOptionalString(flow, "flow"),
-        screen = LocalPackRepository._normalizeOptionalString(screen, "screen"),
-        stepLabel = LocalPackRepository._normalizeOptionalString(
-          stepLabel,
-          "stepLabel",
-        ),
-        reproHint = LocalPackRepository._normalizeOptionalString(
-          reproHint,
-          "reproHint",
-        ),
-        relevantIds = Map<String, String>.unmodifiable(
-          _normalizeRelevantIds(relevantIds),
+        subjectValue = LocalPackRepository._normalizeRequiredString(
+          subjectValue,
+          "subjectValue",
         );
 
   final String captureId;
-  final String identityKind;
-  final String identityValue;
-  final String? flow;
-  final String? screen;
-  final String? stepLabel;
-  final String? reproHint;
-  final Map<String, String> relevantIds;
+  final String failureKind;
+  final String subjectKind;
+  final String subjectValue;
 
   Map<String, Object?> toJson() {
     return <String, Object?>{
       "capture_id": captureId,
-      "identity": <String, Object?>{
-        "kind": identityKind,
-        "value": identityValue,
+      "failure_kind": failureKind,
+      "subject": <String, Object?>{
+        "kind": subjectKind,
+        "value": subjectValue,
       },
-      if (flow != null) "flow": flow,
-      if (screen != null) "screen": screen,
-      if (stepLabel != null) "step_label": stepLabel,
-      if (reproHint != null) "repro_hint": reproHint,
-      if (relevantIds.isNotEmpty)
-        "relevant_ids": Map<String, String>.from(
-          relevantIds,
-        ),
     };
   }
 
   factory LocalPendingCaptureMetadata.fromJson(Map<String, Object?> json) {
-    final Map<String, Object?> identity = LocalPackRepository._requireObjectMap(
-      json["identity"],
-      "identity",
-    );
+    final Map<String, Object?>? subject = json["subject"] == null
+        ? null
+        : LocalPackRepository._requireObjectMap(
+            json["subject"],
+            "subject",
+          );
+    final Map<String, Object?>? legacyIdentity = json["identity"] == null
+        ? null
+        : LocalPackRepository._requireObjectMap(
+            json["identity"],
+            "identity",
+          );
+    final Map<String, Object?> resolvedSubject =
+        subject ?? legacyIdentity ?? <String, Object?>{};
+    final Object? rawFailureKind =
+        json["failure_kind"] ?? json["signature"] ?? json["reason"];
     return LocalPendingCaptureMetadata(
       captureId: LocalPackRepository._requireString(
         json["capture_id"],
         "capture_id",
       ),
-      identityKind: LocalPackRepository._requireString(
-        identity["kind"],
-        "identity.kind",
+      failureKind: rawFailureKind == null
+          ? "legacy_capture"
+          : LocalPackRepository._requireString(
+              rawFailureKind,
+              "failure_kind",
+            ),
+      subjectKind: LocalPackRepository._requireString(
+        resolvedSubject["kind"],
+        "subject.kind",
       ),
-      identityValue: LocalPackRepository._requireString(
-        identity["value"],
-        "identity.value",
-      ),
-      flow: LocalPackRepository._requireOptionalString(json["flow"], "flow"),
-      screen: LocalPackRepository._requireOptionalString(
-        json["screen"],
-        "screen",
-      ),
-      stepLabel: LocalPackRepository._requireOptionalString(
-        json["step_label"],
-        "step_label",
-      ),
-      reproHint: LocalPackRepository._requireOptionalString(
-        json["repro_hint"],
-        "repro_hint",
-      ),
-      relevantIds: LocalPackRepository._requireStringMap(
-        json["relevant_ids"],
-        "relevant_ids",
+      subjectValue: LocalPackRepository._requireString(
+        resolvedSubject["value"],
+        "subject.value",
       ),
     );
-  }
-
-  static Map<String, String> _normalizeRelevantIds(Map<String, String> value) {
-    final Map<String, String> normalized = <String, String>{};
-    for (final MapEntry<String, String> entry in value.entries) {
-      final String key = LocalPackRepository._normalizeRequiredString(
-        entry.key,
-        "relevantIds key",
-      );
-      normalized[key] = LocalPackRepository._normalizeRequiredString(
-        entry.value,
-        'relevantIds["$key"]',
-      );
-    }
-    return normalized;
   }
 }
 
@@ -816,24 +778,6 @@ CREATE TABLE $pendingMetadataTableName (
       return Map<String, Object?>.from(value);
     }
     throw StateError("Invalid DB field `$field`: expected object map.");
-  }
-
-  static Map<String, String> _requireStringMap(Object? value, String field) {
-    if (value == null) {
-      return const <String, String>{};
-    }
-    final Map<String, Object?> raw = _requireObjectMap(value, field);
-    final Map<String, String> normalized = <String, String>{};
-    for (final MapEntry<String, Object?> entry in raw.entries) {
-      if (entry.value is! String) {
-        throw StateError(
-          "Invalid DB field `$field.${entry.key}`: expected String.",
-        );
-      }
-      normalized[_normalizeRequiredString(entry.key, "$field key")] =
-          _normalizeRequiredString(entry.value! as String, "$field value");
-    }
-    return normalized;
   }
 
   static String _normalizeRequiredString(String value, String name) {

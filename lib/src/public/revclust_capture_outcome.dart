@@ -1,7 +1,7 @@
 import "_validation.dart";
 import "revclust_status.dart";
 
-/// Immediate result returned by `capture(...)` or `captureManual(...)`.
+/// Immediate result returned by `captureInvariantFailure(...)`.
 ///
 /// This surface is intentionally separate from later upload lifecycle events.
 sealed class RevclustCaptureOutcome {

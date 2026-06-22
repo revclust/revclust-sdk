@@ -13,7 +13,7 @@ dependencies:
   revclust_flutter_sdk:
     git:
       url: https://github.com/revclust/revclust-sdk.git
-      ref: v0.1.0
+      ref: v0.2.0
 ```
 
 Use the released tag provided by Revclust.
@@ -43,7 +43,7 @@ This is the supported entrypoint for partner integrations.
 
 After adding the dependency, follow the Revclust setup docs for:
 
-- project key and environment configuration
+- project key configuration
 - initialization and status checks
 - state snapshot setup and the first explicit capture
 - first incident verification and troubleshooting

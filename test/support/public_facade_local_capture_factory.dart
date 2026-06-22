@@ -3,10 +3,12 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart" as low_level;
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
+    as low_level;
 import "package:revclust_flutter_sdk/src/persistence/revclust_database_factory.dart";
 import "package:revclust_flutter_sdk/src/public/revclust_local_capture.dart"
     as facade_internal;
+import "package:revclust_flutter_sdk/src/update_context/session_state_store.dart";
 
 import "in_memory_key_store.dart";
 
@@ -45,7 +47,7 @@ final class TestPublicFacadeLocalCaptureFactory
 
   @override
   Future<facade_internal.RevclustFacadeLocalCapture> create(
-    facade.RevclustConfig _,
+    facade.RevclustConfig config,
   ) async {
     createCallCount++;
     if (createCallCount <= failingCreateAttempts) {
@@ -76,13 +78,17 @@ final class TestPublicFacadeLocalCaptureFactory
         facade_internal.RevclustFacadeStateSnapshotAdapter();
     final low_level.RevclustSdk sdk = low_level.RevclustSdk(
       config: low_level.SdkConfig(
-        appVersion: "1.0.0",
-        build: "1000",
+        appVersion: config.appVersion,
+        build: config.build,
+        gitSha: config.gitSha,
+        appReleaseStage: config.releaseStage?.value,
       ),
       packBuilder: _packBuilder,
+      sessionStateStore: _MemorySessionStateStore(),
       runtimeConditionsProvider: _runtimeConditionsProviderFactory(),
       stateSnapshotProvider: adapter,
     );
+    await sdk.initializeUpdateContext();
     this.sdk = sdk;
 
     return facade_internal.DefaultRevclustFacadeLocalCapture(
@@ -160,6 +166,37 @@ final class TestPublicFacadeLocalCaptureFactory
   }
 }
 
+final class _MemorySessionStateStore implements SessionStateStore {
+  String? _lastSeenAppVersion;
+  bool? _cleanShutdown;
+  int? _lastCheckpointTimestampMs;
+
+  @override
+  Future<String?> readLastSeenAppVersion() async => _lastSeenAppVersion;
+
+  @override
+  Future<void> writeLastSeenAppVersion(String appVersion) async {
+    _lastSeenAppVersion = appVersion;
+  }
+
+  @override
+  Future<bool?> readCleanShutdown() async => _cleanShutdown;
+
+  @override
+  Future<void> writeCleanShutdown(bool value) async {
+    _cleanShutdown = value;
+  }
+
+  @override
+  Future<int?> readLastCheckpointTimestampMs() async =>
+      _lastCheckpointTimestampMs;
+
+  @override
+  Future<void> writeLastCheckpointTimestampMs(int timestampMs) async {
+    _lastCheckpointTimestampMs = timestampMs;
+  }
+}
+
 final class SeededPendingCapture {
   const SeededPendingCapture({
     required this.result,
@@ -183,6 +220,7 @@ final class TinyBudgetPackBuilder extends low_level.PackBuilder {
         deviceModel: request.deviceModel,
         osVersion: request.osVersion,
         networkType: request.networkType,
+        appReleaseStage: request.appReleaseStage,
         rttBucket: request.rttBucket,
         quality: request.quality,
         gitSha: request.gitSha,

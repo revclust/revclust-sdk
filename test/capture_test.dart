@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 
 final RegExp _uuidV4Pattern = RegExp(
   r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",

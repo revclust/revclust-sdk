@@ -2,7 +2,7 @@ import "dart:ui" show ErrorCallback, PlatformDispatcher;
 
 import "package:flutter/foundation.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 
 void main() {
   late FlutterExceptionHandler? originalFlutterHandler;
@@ -83,9 +83,14 @@ void main() {
 
     final CaptureEnvelope envelope = emitted.single;
     expect(envelope.trigger.type, "unhandled_exception");
-    expect(envelope.trigger.reason, "_VeryLongError");
-    expect(envelope.trigger.observed, List<String>.filled(512, "x").join());
-    expect((envelope.trigger.observed as String).length, 512);
+    expect(envelope.trigger.reason, isNull);
+    expect(envelope.trigger.attributes["failure_kind"], "unhandled_exception");
+    expect(envelope.trigger.observed, isA<Map<String, Object?>>());
+    final Map<String, Object?> observed =
+        envelope.trigger.observed! as Map<String, Object?>;
+    expect(observed["exception_type"], "_VeryLongError");
+    expect(observed["message"], List<String>.filled(512, "x").join());
+    expect((observed["message"] as String).length, 512);
     expect(envelope.trigger.expected, isNull);
     expect(envelope.trigger.signature, isNull);
   });

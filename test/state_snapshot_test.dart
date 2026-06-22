@@ -4,7 +4,7 @@ import "dart:convert";
 import "package:cryptography/cryptography.dart";
 import "package:cryptography/dart.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 
 void main() {
   group("FR3 state snapshot", () {

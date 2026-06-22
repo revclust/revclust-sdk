@@ -3,7 +3,7 @@ import "dart:io";
 
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 import "package:revclust_flutter_sdk/src/persistence/revclust_database_factory.dart";
 import "package:sqflite/sqflite.dart";
 
@@ -231,13 +231,9 @@ void main() {
         _buildResult(captureId: "capture-1", text: "gzip-bytes-1"),
         metadata: LocalPendingCaptureMetadata(
           captureId: "capture-1",
-          identityKind: "order",
-          identityValue: "ord_123",
-          flow: "checkout",
-          screen: "confirmation",
-          stepLabel: "confirm_order",
-          reproHint: "Retry after the confirmation poll times out.",
-          relevantIds: const <String, String>{"cart_id": "cart_123"},
+          failureKind: "checkout_confirmation_mismatch",
+          subjectKind: "order_ref",
+          subjectValue: "ord_123",
         ),
       );
 
@@ -246,22 +242,43 @@ void main() {
       final LocalPendingCaptureMetadata? metadata =
           await repository.getPendingMetadata("capture-1");
       expect(metadata, isNotNull);
-      expect(metadata!.identityKind, "order");
-      expect(metadata.identityValue, "ord_123");
-      expect(metadata.flow, "checkout");
-      expect(metadata.screen, "confirmation");
-      expect(metadata.stepLabel, "confirm_order");
-      expect(
-        metadata.reproHint,
-        "Retry after the confirmation poll times out.",
-      );
-      expect(
-          metadata.relevantIds, const <String, String>{"cart_id": "cart_123"});
+      expect(metadata!.failureKind, "checkout_confirmation_mismatch");
+      expect(metadata.subjectKind, "order_ref");
+      expect(metadata.subjectValue, "ord_123");
 
       await repository.markUploaded("capture-1");
 
       expect(await repository.countPending(), 0);
       expect(await repository.getPendingMetadata("capture-1"), isNull);
+    });
+
+    test("legacy prose and hint metadata are ignored during decode", () {
+      final LocalPendingCaptureMetadata metadata =
+          LocalPendingCaptureMetadata.fromJson(<String, Object?>{
+        "capture_id": "capture-legacy",
+        "signature": "checkout_confirmation_mismatch",
+        "identity": <String, Object?>{
+          "kind": "order_ref",
+          "value": "ord_123",
+        },
+        "flow": "checkout",
+        "screen": "confirmation",
+        "step_label": "confirm_order",
+        "repro_hint": "Legacy prose should not be surfaced.",
+        "relevant_ids": <String, Object?>{
+          "cart_id": "cart_123",
+        },
+      });
+
+      expect(metadata.captureId, "capture-legacy");
+      expect(metadata.failureKind, "checkout_confirmation_mismatch");
+      expect(metadata.subjectKind, "order_ref");
+      expect(metadata.subjectValue, "ord_123");
+      expect(metadata.toJson().containsKey("repro_hint"), isFalse);
+      expect(metadata.toJson().containsKey("flow"), isFalse);
+      expect(metadata.toJson().containsKey("screen"), isFalse);
+      expect(metadata.toJson().containsKey("step_label"), isFalse);
+      expect(metadata.toJson().containsKey("relevant_ids"), isFalse);
     });
 
     test("logs structured local persistence failures without leaking blob data",

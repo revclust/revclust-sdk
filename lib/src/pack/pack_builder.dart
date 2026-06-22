@@ -202,10 +202,12 @@ class PackBuilder {
   Map<String, Object?> _buildTrigger(CaptureEnvelope captureEnvelope) {
     final Map<String, Object?> triggerPayload = <String, Object?>{
       "type": captureEnvelope.trigger.type,
-      "reason": captureEnvelope.trigger.reason,
       "trigger_utc_ms": captureEnvelope.triggerUtcMs,
       "trigger_mono_ms": captureEnvelope.triggerMonoMs,
     };
+    if (captureEnvelope.trigger.reason != null) {
+      triggerPayload["reason"] = captureEnvelope.trigger.reason;
+    }
     final List<String> attributeKeys = captureEnvelope.trigger.attributes.keys
         .where((String key) => !triggerPayload.containsKey(key))
         .toList(growable: false)
@@ -251,6 +253,8 @@ class PackBuilder {
     final String? normalizedQuality =
         _normalizeOptionalNonEmpty(request.quality);
     final String? normalizedGitSha = _normalizeGitSha(request.gitSha);
+    final String? normalizedAppReleaseStage =
+        _normalizeOptionalNonEmpty(request.appReleaseStage);
 
     if (normalizedRttBucket == null) {
       missingFields.add("conditions.rtt_bucket");
@@ -285,6 +289,9 @@ class PackBuilder {
     }
     if (normalizedGitSha != null) {
       conditions["git_sha"] = normalizedGitSha;
+    }
+    if (normalizedAppReleaseStage != null) {
+      conditions["app_release_stage"] = normalizedAppReleaseStage;
     }
 
     return _ResolvedConditions(

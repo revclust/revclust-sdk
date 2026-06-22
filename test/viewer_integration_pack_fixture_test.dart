@@ -19,6 +19,7 @@ void main() {
     expect(conditions["device_model"], "Pixel 9 Pro");
     expect(conditions["os_version"], "Android 16");
     expect(conditions["network_type"], "wifi");
+    expect(conditions["app_release_stage"], "staging");
 
     final Map<String, Object?> stateSnapshot = _asObjectMap(
       result.payload["state_snapshot"],

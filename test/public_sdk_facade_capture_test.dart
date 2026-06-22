@@ -5,7 +5,8 @@ import "package:dio/dio.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart" as low_level;
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
+    as low_level;
 import "package:revclust_flutter_sdk/src/public/revclust.dart"
     as facade_internal;
 import "package:revclust_flutter_sdk/src/public/revclust_local_capture.dart"
@@ -16,8 +17,9 @@ import "package:revclust_flutter_sdk/src/state/state_snapshot.dart";
 
 import "support/public_facade_local_capture_factory.dart";
 
-const String _primaryProjectKey = "rpk_uC4n8XQvJ9tR2mLsY7pKdB3fW6zHaNe1";
-const String _secondaryProjectKey = "rpk_M2pQ8dLx7YvN1kTr4HsJc9_wZa6BgFe2";
+// Deliberately synthetic shape-valid test keys; never provision these.
+const String _primaryProjectKey = "rpk_00000000000000000000000000000000";
+const String _secondaryProjectKey = "rpk_11111111111111111111111111111111";
 
 void main() {
   late TestPublicFacadeLocalCaptureFactory localCaptureFactory;
@@ -50,9 +52,9 @@ void main() {
         ),
       );
 
-      final facade.RevclustTrigger trigger = _trigger();
-      final facade.RevclustCaptureQueued queued =
-          (await revclust.capture(trigger)) as facade.RevclustCaptureQueued;
+      final facade.RevclustInvariantFailure failure = _failure();
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(failure)) as facade.RevclustCaptureQueued;
 
       expect(queued.captureId, isNotEmpty);
       expect(
@@ -70,43 +72,48 @@ void main() {
       final low_level.LocalPendingCaptureMetadata? metadata =
           await localCaptureFactory.getPendingMetadata(queued.captureId);
       expect(metadata, isNotNull);
-      expect(metadata!.identityKind, "order");
-      expect(metadata.identityValue, "ord_123");
-      expect(metadata.flow, "checkout");
-      expect(metadata.screen, "confirmation");
-      expect(metadata.stepLabel, "confirm_order");
-      expect(
-        metadata.reproHint,
-        "Retry checkout after a slow confirmation poll.",
-      );
-      expect(metadata.relevantIds, <String, String>{"cart_id": "cart_123"});
+      expect(metadata!.failureKind, "checkout_confirmation_mismatch");
+      expect(metadata.subjectKind, "order_ref");
+      expect(metadata.subjectValue, "ord_123");
 
       final Map<String, Object?>? payload =
           await localCaptureFactory.decodePendingPayload(queued.captureId);
       expect(payload, isNotNull);
       expect(payload!["capture_id"], queued.captureId);
       expect(payload["schema_version"], "1.0.0");
+      expect(
+        _asObjectMap(payload["conditions"])["app_release_stage"],
+        "staging",
+      );
+      expect(_asObjectMap(payload["conditions"])["app_version"], "1.2.3");
+      expect(_asObjectMap(payload["conditions"])["build"], "1203");
+      expect(_asObjectMap(payload["conditions"])["git_sha"], "abcdef1");
+      expect(
+        _asObjectMap(_asObjectMap(payload["conditions"])["update_context"]),
+        <String, Object?>{
+          "is_first_run_after_update": false,
+          "prev_app_version": null,
+          "install_type": "fresh_install",
+        },
+      );
 
       final Map<String, Object?> triggerPayload = _asObjectMap(
         payload["trigger"],
       );
-      expect(triggerPayload["reason"], trigger.reason);
-      expect(triggerPayload["signature"], trigger.signature);
+      expect(triggerPayload["type"], "invariant_failure");
+      expect(triggerPayload["failure_kind"], failure.failureKind);
       expect(
-        _asObjectMap(triggerPayload["identity"]),
-        <String, Object?>{"kind": "order", "value": "ord_123"},
+        _asObjectMap(triggerPayload["subject"]),
+        <String, Object?>{"kind": "order_ref", "value": "ord_123"},
       );
-      expect(triggerPayload["flow"], "checkout");
-      expect(triggerPayload["screen"], "confirmation");
-      expect(triggerPayload["step_label"], "confirm_order");
-      expect(
-        triggerPayload["repro_hint"],
-        "Retry checkout after a slow confirmation poll.",
-      );
-      expect(
-        _asObjectMap(triggerPayload["relevant_ids"]),
-        <String, Object?>{"cart_id": "cart_123"},
-      );
+      expect(triggerPayload.containsKey("reason"), isFalse);
+      expect(triggerPayload.containsKey("signature"), isFalse);
+      expect(triggerPayload.containsKey("identity"), isFalse);
+      expect(triggerPayload.containsKey("flow"), isFalse);
+      expect(triggerPayload.containsKey("screen"), isFalse);
+      expect(triggerPayload.containsKey("step_label"), isFalse);
+      expect(triggerPayload.containsKey("relevant_ids"), isFalse);
+      expect(triggerPayload.containsKey("repro_hint"), isFalse);
       expect(
         triggerPayload["expected"],
         <String, Object?>{"order_status": "confirmed"},
@@ -129,6 +136,124 @@ void main() {
       );
     });
 
+    test("reviewed timeline breadcrumbs are captured in pre-trigger order",
+        () async {
+      final facade.Revclust revclust = await _initializeWithAssessment(
+        _readyAssessment(),
+      );
+
+      revclust.recordUiIntent(
+        name: "book_selected",
+        attributes: const <String, Object?>{
+          "catalog_segment": "popular",
+          "book_ref": "book_ref_123",
+        },
+      );
+      revclust.recordScreenTransition(
+        fromScreen: "books.popular",
+        toScreen: "book_details",
+        attributes: const <String, Object?>{"book_ref": "book_ref_123"},
+      );
+
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
+      final Map<String, Object?>? payload =
+          await localCaptureFactory.decodePendingPayload(queued.captureId);
+      expect(payload, isNotNull);
+
+      final List<Object?> timeline = _asObjectList(payload!["timeline"]);
+      expect(timeline, hasLength(2));
+
+      final Map<String, Object?> selected = _asObjectMap(timeline[0]);
+      expect(selected["event_type"], "ui.intent");
+      expect(selected["t_mono_ms"], isA<int>());
+      expect(selected["name"], "book_selected");
+      expect(selected["catalog_segment"], "popular");
+      expect(selected["book_ref"], "book_ref_123");
+
+      final Map<String, Object?> transition = _asObjectMap(timeline[1]);
+      expect(transition["event_type"], "ui.screen_transition");
+      expect(transition["t_mono_ms"], isA<int>());
+      expect(transition["from"], "books.popular");
+      expect(transition["to"], "book_details");
+      expect(transition["book_ref"], "book_ref_123");
+    });
+
+    test("reviewed timeline breadcrumbs are best effort and bounded", () async {
+      final facade.Revclust revclust = await _initializeWithAssessment(
+        _readyAssessment(),
+      );
+
+      expect(
+        () => revclust.recordUiIntent(name: "   "),
+        returnsNormally,
+      );
+      expect(
+        () => revclust.recordScreenTransition(
+          fromScreen: "books.popular",
+          toScreen: " ",
+        ),
+        returnsNormally,
+      );
+
+      revclust.recordUiIntent(
+        name: "  book_selected  ",
+        attributes: <String, Object?>{
+          " catalog_segment ": "popular",
+          "long_string": List<String>.filled(300, "x").join(),
+          "unsupported": Object(),
+          "nan": double.nan,
+          "duplicate": "first",
+          " duplicate ": "second",
+          "nested": <Object?, Object?>{
+            " child ": "value",
+            7: "dropped",
+            "": "dropped",
+            "unsupported": Object(),
+          },
+          "list": <Object?>["ok", Object(), null, double.infinity, false],
+          "too_large": List<String>.filled(
+            40,
+            List<String>.filled(256, "z").join(),
+          ),
+          for (int index = 0; index < 20; index += 1) "k$index": "v$index",
+        },
+      );
+
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
+      final Map<String, Object?>? payload =
+          await localCaptureFactory.decodePendingPayload(queued.captureId);
+      expect(payload, isNotNull);
+
+      final List<Object?> timeline = _asObjectList(payload!["timeline"]);
+      expect(timeline, hasLength(1));
+      final Map<String, Object?> entry = _asObjectMap(timeline.single);
+
+      expect(entry["event_type"], "ui.intent");
+      expect(entry["name"], "book_selected");
+      expect(entry["catalog_segment"], "popular");
+      expect(entry["long_string"], List<String>.filled(256, "x").join());
+      expect(entry["unsupported"], isNull);
+      expect(entry.containsKey("unsupported"), isFalse);
+      expect(entry.containsKey("nan"), isFalse);
+      expect(entry["duplicate"], "first");
+      expect(
+        _asObjectMap(entry["nested"]),
+        <String, Object?>{"child": "value"},
+      );
+      expect(_asObjectList(entry["list"]), <Object?>["ok", null, false]);
+      expect(entry.containsKey("too_large"), isFalse);
+      expect(entry["k10"], "v10");
+      expect(entry.containsKey("k11"), isFalse);
+
+      facade_internal.RevclustFacadeTestSupport.reset();
+      expect(
+        () => revclust.recordUiIntent(name: "after_dispose"),
+        returnsNormally,
+      );
+    });
+
     test("public state snapshots are bounded and JSON-safe before pack build",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
@@ -147,8 +272,8 @@ void main() {
         ),
       );
 
-      final facade.RevclustCaptureQueued queued =
-          (await revclust.capture(_trigger())) as facade.RevclustCaptureQueued;
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
       final Map<String, Object?>? payload =
           await localCaptureFactory.decodePendingPayload(queued.captureId);
       expect(payload, isNotNull);
@@ -169,14 +294,14 @@ void main() {
       expect(dataState, isEmpty);
     });
 
-    test("captureManual queues locally through the same Slice 3 path",
+    test("captureInvariantFailure queues locally through the Slice 3 path",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
         _readyAssessment(),
       );
 
       final facade.RevclustCaptureQueued queued = (await revclust
-          .captureManual(_trigger())) as facade.RevclustCaptureQueued;
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
 
       expect(queued.captureId, isNotEmpty);
       expect(
@@ -234,8 +359,9 @@ void main() {
         _readyAssessment(),
       );
 
-      final facade.RevclustCaptureOutcome outcome = await revclust.capture(
-        _trigger(),
+      final facade.RevclustCaptureOutcome outcome =
+          await revclust.captureInvariantFailure(
+        _failure(),
       );
 
       expect(outcome, isA<facade.RevclustCaptureQueued>());
@@ -267,8 +393,9 @@ void main() {
         _readyAssessment(),
       );
 
-      final facade.RevclustCaptureOutcome outcome = await revclust.capture(
-        _trigger(),
+      final facade.RevclustCaptureOutcome outcome =
+          await revclust.captureInvariantFailure(
+        _failure(),
       );
 
       expect(outcome, isA<facade.RevclustCaptureQueued>());
@@ -293,9 +420,9 @@ void main() {
             result: buildSeededPackResult(captureId: "cap_seeded_001"),
             metadata: low_level.LocalPendingCaptureMetadata(
               captureId: "cap_seeded_001",
-              identityKind: "order",
-              identityValue: "ord_seeded",
-              flow: "checkout",
+              failureKind: "checkout_confirmation_mismatch",
+              subjectKind: "order_ref",
+              subjectValue: "ord_seeded",
             ),
           ),
         ],
@@ -320,8 +447,9 @@ void main() {
       final low_level.LocalPendingCaptureMetadata? metadata =
           await localCaptureFactory.getPendingMetadata("cap_seeded_001");
       expect(metadata, isNotNull);
-      expect(metadata!.identityValue, "ord_seeded");
-      expect(metadata.flow, "checkout");
+      expect(metadata!.failureKind, "checkout_confirmation_mismatch");
+      expect(metadata.subjectKind, "order_ref");
+      expect(metadata.subjectValue, "ord_seeded");
     });
 
     test("build failures return BuildFailed and do not queue pending work",
@@ -339,8 +467,9 @@ void main() {
         _readyAssessment(),
       );
 
-      final facade.RevclustCaptureBuildFailed failed = (await revclust
-          .capture(_trigger())) as facade.RevclustCaptureBuildFailed;
+      final facade.RevclustCaptureBuildFailed failed =
+          (await revclust.captureInvariantFailure(_failure()))
+              as facade.RevclustCaptureBuildFailed;
 
       expect(failed.captureId, isNotEmpty);
       expect(failed.message, isNotEmpty);
@@ -363,8 +492,9 @@ void main() {
         _readyAssessment(),
       );
 
-      final facade.RevclustCaptureOutcome outcome = await revclust.capture(
-        _trigger(),
+      final facade.RevclustCaptureOutcome outcome =
+          await revclust.captureInvariantFailure(
+        _failure(),
       );
 
       expect(outcome, isA<facade.RevclustCapturePersistenceFailed>());
@@ -376,8 +506,7 @@ void main() {
       expect(await localCaptureFactory.countPending(), 0);
     });
 
-    test("local storage scope changes across project keys in one environment",
-        () {
+    test("local storage scope changes across project keys", () {
       final String firstDatabaseFileName = facade_internal
           .RevclustFacadeTestSupport.localStorageDatabaseFileName(
         _config(projectKey: _primaryProjectKey),
@@ -397,34 +526,55 @@ void main() {
 
       expect(firstDatabaseFileName, isNot(secondDatabaseFileName));
       expect(firstStorageKey, isNot(secondStorageKey));
-      expect(
-        firstDatabaseFileName,
-        contains(facade.RevclustEnvironment.staging.name),
+      expect(firstDatabaseFileName, isNot(contains("staging")));
+      expect(secondStorageKey, isNot(contains("staging")));
+    });
+
+    test("omitted build metadata preserves unknown condition fallbacks",
+        () async {
+      final facade.Revclust revclust = await _initializeWithAssessment(
+        _readyAssessment(),
+        config: facade.RevclustConfig(projectKey: _primaryProjectKey),
       );
-      expect(
-        secondStorageKey,
-        contains(facade.RevclustEnvironment.staging.name),
+
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
+      final Map<String, Object?>? payload =
+          await localCaptureFactory.decodePendingPayload(queued.captureId);
+      final Map<String, Object?> conditions = _asObjectMap(
+        payload!["conditions"],
       );
+
+      expect(conditions["app_version"], "unknown");
+      expect(conditions["build"], "unknown");
+      expect(conditions.containsKey("git_sha"), isFalse);
     });
   });
 }
 
 facade.RevclustConfig _config({
   String projectKey = _primaryProjectKey,
-  facade.RevclustEnvironment environment = facade.RevclustEnvironment.staging,
+  facade.RevclustAppReleaseStage? releaseStage =
+      facade.RevclustAppReleaseStage.staging,
+  String? appVersion = "1.2.3",
+  String? build = "1203",
+  String? gitSha = "ABCDEF1",
 }) {
   return facade.RevclustConfig(
     projectKey: projectKey,
-    environment: environment,
+    releaseStage: releaseStage,
+    appVersion: appVersion,
+    build: build,
+    gitSha: gitSha,
   );
 }
 
 Future<facade.Revclust> _initializeWithAssessment(
-  facade_internal.RevclustBootstrapAssessment assessment,
-) {
+    facade_internal.RevclustBootstrapAssessment assessment,
+    {facade.RevclustConfig? config}) {
   facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
       _FakeBootstrapProbe((_) async => assessment);
-  return facade.Revclust.initialize(_config());
+  return facade.Revclust.initialize(config ?? _config());
 }
 
 facade_internal.RevclustBootstrapAssessment _readyAssessment() {
@@ -438,21 +588,15 @@ facade_internal.RevclustBootstrapAssessment _readyAssessment() {
   );
 }
 
-facade.RevclustTrigger _trigger() {
-  return facade.RevclustTrigger(
-    reason: "checkout confirmation mismatch",
-    expected: <String, Object?>{"order_status": "confirmed"},
-    observed: <String, Object?>{"order_status": "retrying"},
-    identity: facade.RevclustIdentity(
-      kind: "order",
+facade.RevclustInvariantFailure _failure() {
+  return facade.RevclustInvariantFailure(
+    failureKind: "checkout_confirmation_mismatch",
+    subject: facade.RevclustSubject(
+      kind: "order_ref",
       value: "ord_123",
     ),
-    signature: "checkout_confirmation_mismatch",
-    flow: "checkout",
-    screen: "confirmation",
-    stepLabel: "confirm_order",
-    reproHint: "Retry checkout after a slow confirmation poll.",
-    relevantIds: const <String, String>{"cart_id": "cart_123"},
+    expected: <String, Object?>{"order_status": "confirmed"},
+    observed: <String, Object?>{"order_status": "retrying"},
   );
 }
 
@@ -461,6 +605,16 @@ Map<String, Object?> _asObjectMap(Object? value) {
     return Map<String, Object?>.from(value);
   }
   throw StateError("Expected object map.");
+}
+
+List<Object?> _asObjectList(Object? value) {
+  if (value is List<Object?>) {
+    return value;
+  }
+  if (value is List<dynamic>) {
+    return List<Object?>.from(value);
+  }
+  throw StateError("Expected object list.");
 }
 
 final class _FakeBootstrapProbe
@@ -523,11 +677,10 @@ final class _CountPendingFailureFacadeLocalCapture
   low_level.LocalPackRepository get repository => _delegate.repository;
 
   @override
-  Future<facade.RevclustCaptureOutcome> capture(
-    facade.RevclustTrigger trigger, {
-    required bool manual,
-  }) {
-    return _delegate.capture(trigger, manual: manual);
+  Future<facade.RevclustCaptureOutcome> captureInvariantFailure(
+    facade.RevclustInvariantFailure failure,
+  ) {
+    return _delegate.captureInvariantFailure(failure);
   }
 
   @override
@@ -545,6 +698,27 @@ final class _CountPendingFailureFacadeLocalCapture
   @override
   void enableDioCapture(Dio dio) {
     _delegate.enableDioCapture(dio);
+  }
+
+  @override
+  void recordScreenTransition({
+    required String fromScreen,
+    required String toScreen,
+    Map<String, Object?> attributes = const <String, Object?>{},
+  }) {
+    _delegate.recordScreenTransition(
+      fromScreen: fromScreen,
+      toScreen: toScreen,
+      attributes: attributes,
+    );
+  }
+
+  @override
+  void recordUiIntent({
+    required String name,
+    Map<String, Object?> attributes = const <String, Object?>{},
+  }) {
+    _delegate.recordUiIntent(name: name, attributes: attributes);
   }
 
   @override

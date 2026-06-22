@@ -1,7 +1,9 @@
 import "package:dio/dio.dart";
 
 import "_validation.dart";
+import "revclust_bootstrap_origin.dart";
 import "revclust_config.dart";
+import "revclust_diagnostics.dart";
 
 /// Short-lived upload authorization returned by hosted bootstrap.
 final class RevclustBootstrapLease {
@@ -37,48 +39,60 @@ final class RevclustBootstrapAssessment {
     this.disposition, {
     this.message,
     this.lease,
+    this.diagnostics,
   });
 
   RevclustBootstrapAssessment.ready({
     required RevclustBootstrapLease lease,
     String? message,
+    RevclustBootstrapDiagnostics? diagnostics,
   }) : this._(
           RevclustBootstrapDisposition.ready,
           message: message,
           lease: lease,
+          diagnostics: diagnostics,
         );
 
   const RevclustBootstrapAssessment.bootstrapUnavailable({
     String? message,
+    RevclustBootstrapDiagnostics? diagnostics,
   }) : this._(
           RevclustBootstrapDisposition.bootstrapUnavailable,
           message: message,
+          diagnostics: diagnostics,
         );
 
   const RevclustBootstrapAssessment.misconfigured({
     String? message,
+    RevclustBootstrapDiagnostics? diagnostics,
   }) : this._(
           RevclustBootstrapDisposition.misconfigured,
           message: message,
+          diagnostics: diagnostics,
         );
 
   const RevclustBootstrapAssessment.notProvisioned({
     String? message,
+    RevclustBootstrapDiagnostics? diagnostics,
   }) : this._(
           RevclustBootstrapDisposition.notProvisioned,
           message: message,
+          diagnostics: diagnostics,
         );
 
   const RevclustBootstrapAssessment.uploadBlocked({
     String? message,
+    RevclustBootstrapDiagnostics? diagnostics,
   }) : this._(
           RevclustBootstrapDisposition.uploadBlocked,
           message: message,
+          diagnostics: diagnostics,
         );
 
   final RevclustBootstrapDisposition disposition;
   final String? message;
   final RevclustBootstrapLease? lease;
+  final RevclustBootstrapDiagnostics? diagnostics;
 }
 
 /// Bootstrap outcomes available to the public facade runtime.
@@ -117,14 +131,15 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
 
   @override
   Future<RevclustBootstrapAssessment> assess(RevclustConfig config) async {
-    final Uri endpoint = _defaultBootstrapEndpoint(config.environment);
+    final Uri bootstrapOrigin = _bootstrapOrigin(config);
+    final Uri endpoint = _bootstrapEndpoint(bootstrapOrigin);
+    final DateTime checkedAt = _utcNow();
     Response<dynamic> response;
     try {
       response = await _dio.postUri(
         endpoint,
         data: <String, Object?>{
           "project_key": config.projectKey,
-          "environment": config.environment.name,
         },
         options: Options(
           headers: <String, Object?>{
@@ -134,8 +149,19 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
         ),
       );
     } on DioException catch (error) {
+      final String message = _describeTransportFailure(error);
       return RevclustBootstrapAssessment.bootstrapUnavailable(
-        message: _describeTransportFailure(error),
+        message: message,
+        diagnostics: _diagnostics(
+          state: RevclustBootstrapDiagnosticState.unavailable,
+          bootstrapOrigin: bootstrapOrigin,
+          checkedAt: checkedAt,
+          statusCode: error.response?.statusCode,
+          errorCategory: "transport_unavailable",
+          retryable: _isRetryableStatus(error.response?.statusCode) ||
+              error.response == null,
+          message: message,
+        ),
       );
     }
 
@@ -144,7 +170,9 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
     if (response.statusCode == 200 || response.statusCode == 201) {
       final RevclustBootstrapAssessment? success = _parseSuccessBody(
         body,
-        parsedError: parsedError,
+        bootstrapOrigin: bootstrapOrigin,
+        checkedAt: checkedAt,
+        statusCode: response.statusCode,
       );
       if (success != null) {
         return success;
@@ -154,12 +182,16 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
     return _mapFailure(
       statusCode: response.statusCode,
       parsedError: parsedError,
+      bootstrapOrigin: bootstrapOrigin,
+      checkedAt: checkedAt,
     );
   }
 
   RevclustBootstrapAssessment? _parseSuccessBody(
     Map<String, Object?> body, {
-    required _ParsedBootstrapError? parsedError,
+    required Uri bootstrapOrigin,
+    required DateTime checkedAt,
+    required int? statusCode,
   }) {
     final Map<String, Object?>? upload =
         _asObjectMapOrNull(body["upload"]) ?? _asObjectMapOrNull(body);
@@ -197,79 +229,204 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
     );
     if (!lease.isUsableAt(_utcNow())) {
       return RevclustBootstrapAssessment.uploadBlocked(
-        message: parsedError?.message ??
-            "Hosted bootstrap returned expired upload authorization.",
+        message: "Hosted bootstrap returned expired upload authorization.",
+        diagnostics: _diagnostics(
+          state: RevclustBootstrapDiagnosticState.uploadBlocked,
+          bootstrapOrigin: bootstrapOrigin,
+          checkedAt: checkedAt,
+          statusCode: statusCode,
+          errorCategory: "auth_expired",
+          retryable: true,
+          message: "Hosted bootstrap returned expired upload authorization.",
+        ),
       );
     }
     return RevclustBootstrapAssessment.ready(
       lease: lease,
-      message: parsedError?.message,
+      diagnostics: _diagnostics(
+        state: RevclustBootstrapDiagnosticState.ready,
+        bootstrapOrigin: bootstrapOrigin,
+        checkedAt: checkedAt,
+        statusCode: statusCode,
+        retryable: false,
+      ),
     );
   }
 
   RevclustBootstrapAssessment _mapFailure({
     required int? statusCode,
     required _ParsedBootstrapError? parsedError,
+    required Uri bootstrapOrigin,
+    required DateTime checkedAt,
   }) {
     final String? code = parsedError?.code;
-    final String? message = parsedError?.message;
     switch (code) {
       case "misconfigured":
       case "invalid_project_key":
       case "project_key_invalid":
       case "invalid_project":
+        final String message = _failureMessageFor(
+          code: code,
+          statusCode: statusCode,
+        );
         return RevclustBootstrapAssessment.misconfigured(
-          message: message ??
-              "Project key is misconfigured for the selected environment.",
+          message: message,
+          diagnostics: _diagnostics(
+            state: RevclustBootstrapDiagnosticState.misconfigured,
+            bootstrapOrigin: bootstrapOrigin,
+            checkedAt: checkedAt,
+            statusCode: statusCode,
+            errorCategory: code,
+            retryable: false,
+            message: message,
+          ),
         );
       case "not_provisioned":
       case "project_not_provisioned":
       case "project_unavailable":
+        final String message = _failureMessageFor(
+          code: code,
+          statusCode: statusCode,
+        );
         return RevclustBootstrapAssessment.notProvisioned(
-          message: message ??
-              "Project key is not provisioned for the selected environment.",
+          message: message,
+          diagnostics: _diagnostics(
+            state: RevclustBootstrapDiagnosticState.notProvisioned,
+            bootstrapOrigin: bootstrapOrigin,
+            checkedAt: checkedAt,
+            statusCode: statusCode,
+            errorCategory: code,
+            retryable: false,
+            message: message,
+          ),
         );
       case "upload_blocked":
       case "upload_auth_unavailable":
       case "auth_expired":
       case "auth_unavailable":
+        final String message = _failureMessageFor(
+          code: code,
+          statusCode: statusCode,
+        );
         return RevclustBootstrapAssessment.uploadBlocked(
-          message: message ??
-              "Upload authorization could not be obtained right now.",
+          message: message,
+          diagnostics: _diagnostics(
+            state: RevclustBootstrapDiagnosticState.uploadBlocked,
+            bootstrapOrigin: bootstrapOrigin,
+            checkedAt: checkedAt,
+            statusCode: statusCode,
+            errorCategory: code,
+            retryable: true,
+            message: message,
+          ),
         );
       default:
         if (statusCode == 400) {
+          final String message = _failureMessageFor(
+            code: code,
+            statusCode: statusCode,
+          );
           return RevclustBootstrapAssessment.misconfigured(
-            message:
-                message ?? "Hosted bootstrap rejected the project key request.",
+            message: message,
+            diagnostics: _diagnostics(
+              state: RevclustBootstrapDiagnosticState.misconfigured,
+              bootstrapOrigin: bootstrapOrigin,
+              checkedAt: checkedAt,
+              statusCode: statusCode,
+              errorCategory: code ?? "invalid_project_key",
+              retryable: false,
+              message: message,
+            ),
           );
         }
         if (statusCode == 401 || statusCode == 403) {
+          final String message = _failureMessageFor(
+            code: code,
+            statusCode: statusCode,
+          );
           return RevclustBootstrapAssessment.uploadBlocked(
-            message:
-                message ?? "Hosted bootstrap rejected upload authorization.",
+            message: message,
+            diagnostics: _diagnostics(
+              state: RevclustBootstrapDiagnosticState.uploadBlocked,
+              bootstrapOrigin: bootstrapOrigin,
+              checkedAt: checkedAt,
+              statusCode: statusCode,
+              errorCategory: code ?? "upload_auth_unavailable",
+              retryable: true,
+              message: message,
+            ),
           );
         }
         if (statusCode == 404) {
+          final String message = _failureMessageFor(
+            code: code,
+            statusCode: statusCode,
+          );
           return RevclustBootstrapAssessment.notProvisioned(
-            message: message ??
-                "Project key is not provisioned for the selected environment.",
+            message: message,
+            diagnostics: _diagnostics(
+              state: RevclustBootstrapDiagnosticState.notProvisioned,
+              bootstrapOrigin: bootstrapOrigin,
+              checkedAt: checkedAt,
+              statusCode: statusCode,
+              errorCategory: code ?? "project_not_provisioned",
+              retryable: false,
+              message: message,
+            ),
           );
         }
+        final String message = _failureMessageFor(
+          code: code,
+          statusCode: statusCode,
+        );
         return RevclustBootstrapAssessment.bootstrapUnavailable(
-          message: message ??
-              "Hosted bootstrap could not be completed successfully.",
+          message: message,
+          diagnostics: _diagnostics(
+            state: RevclustBootstrapDiagnosticState.unavailable,
+            bootstrapOrigin: bootstrapOrigin,
+            checkedAt: checkedAt,
+            statusCode: statusCode,
+            errorCategory: code ?? "bootstrap_unavailable",
+            retryable: _isRetryableStatus(statusCode),
+            message: message,
+          ),
         );
     }
   }
 
-  static Uri _defaultBootstrapEndpoint(RevclustEnvironment environment) {
-    final String origin = switch (environment) {
-      RevclustEnvironment.production => "https://revclust.com",
-      RevclustEnvironment.staging => "https://staging.revclust.com",
-      RevclustEnvironment.development => "http://127.0.0.1:3000",
-    };
-    return Uri.parse("$origin/api/pilot/sdk/bootstrap");
+  static Uri _bootstrapOrigin(RevclustConfig config) {
+    return resolveInternalRevclustBootstrapOrigin(config);
+  }
+
+  static Uri _bootstrapEndpoint(Uri origin) {
+    return origin.resolve("/api/pilot/sdk/bootstrap");
+  }
+
+  static RevclustBootstrapDiagnostics _diagnostics({
+    required RevclustBootstrapDiagnosticState state,
+    required Uri bootstrapOrigin,
+    required DateTime checkedAt,
+    int? statusCode,
+    String? errorCategory,
+    bool? retryable,
+    String? message,
+  }) {
+    return RevclustBootstrapDiagnostics(
+      state: state,
+      bootstrapOrigin: bootstrapOrigin,
+      lastCheckedAt: checkedAt.toUtc(),
+      lastHttpStatus: statusCode,
+      errorCategory: errorCategory,
+      retryable: retryable,
+      message: message,
+    );
+  }
+
+  static bool _isRetryableStatus(int? statusCode) {
+    return statusCode == null ||
+        statusCode == 408 ||
+        statusCode == 429 ||
+        statusCode >= 500;
   }
 
   static Uri? _parseViewerBaseUrl(Map<String, Object?> body) {
@@ -297,8 +454,7 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
       return null;
     }
     return _ParsedBootstrapError(
-      code: _readOptionalString(error, <String>["code"]),
-      message: _readOptionalString(error, <String>["message"]),
+      code: _readKnownErrorCode(_readOptionalString(error, <String>["code"])),
     );
   }
 
@@ -330,23 +486,80 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
   }
 
   static String _describeTransportFailure(DioException error) {
-    final String? message = error.message?.trim();
-    if (message != null && message.isNotEmpty) {
-      return message;
+    return switch (error.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout =>
+        "Hosted bootstrap timed out.",
+      DioExceptionType.badCertificate =>
+        "Hosted bootstrap TLS verification failed.",
+      _ => "Hosted bootstrap could not be reached.",
+    };
+  }
+
+  static String? _readKnownErrorCode(String? value) {
+    final String? normalized = value?.trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) {
+      return null;
     }
-    return "Hosted bootstrap could not be reached.";
+    return _knownBootstrapErrorCodes.contains(normalized) ? normalized : null;
+  }
+
+  static String _failureMessageFor({
+    required String? code,
+    required int? statusCode,
+  }) {
+    switch (code) {
+      case "misconfigured":
+      case "invalid_project_key":
+      case "project_key_invalid":
+      case "invalid_project":
+        return "Project key is misconfigured.";
+      case "not_provisioned":
+      case "project_not_provisioned":
+      case "project_unavailable":
+        return "Project key is not provisioned.";
+      case "upload_blocked":
+      case "upload_auth_unavailable":
+      case "auth_expired":
+      case "auth_unavailable":
+        return "Upload authorization could not be obtained right now.";
+    }
+    if (statusCode == 400) {
+      return "Hosted bootstrap rejected the project key request.";
+    }
+    if (statusCode == 401 || statusCode == 403) {
+      return "Hosted bootstrap rejected upload authorization.";
+    }
+    if (statusCode == 404) {
+      return "Project key is not provisioned.";
+    }
+    return "Hosted bootstrap could not be completed successfully.";
   }
 }
 
 final class _ParsedBootstrapError {
   const _ParsedBootstrapError({
     required this.code,
-    required this.message,
   });
 
   final String? code;
-  final String? message;
 }
+
+const Set<String> _knownBootstrapErrorCodes = <String>{
+  "misconfigured",
+  "invalid_project_key",
+  "project_key_invalid",
+  "invalid_project",
+  "not_provisioned",
+  "project_not_provisioned",
+  "project_unavailable",
+  "upload_blocked",
+  "upload_auth_unavailable",
+  "auth_expired",
+  "auth_unavailable",
+  "bootstrap_unavailable",
+};
 
 Uri _normalizeHttpsOrHttpUri(Uri value, String name) {
   if (!value.hasScheme || (value.scheme != "https" && value.scheme != "http")) {

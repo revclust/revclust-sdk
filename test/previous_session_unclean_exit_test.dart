@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 import "package:revclust_flutter_sdk/src/update_context/session_state_store.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
@@ -74,7 +74,11 @@ void main() {
     expect(emitted, hasLength(1));
     final CaptureEnvelope envelope = emitted.single;
     expect(envelope.trigger.type, "previous_session_unclean_exit");
-    expect(envelope.trigger.reason, "previous session ended uncleanly");
+    expect(envelope.trigger.reason, isNull);
+    expect(
+      envelope.trigger.attributes["failure_kind"],
+      "previous_session_unclean_exit",
+    );
     expect(envelope.trigger.signature, isNull);
     expect(envelope.trigger.expected, isNull);
     expect(envelope.trigger.observed, isA<Map<String, Object?>>());

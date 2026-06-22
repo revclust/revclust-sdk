@@ -24,6 +24,8 @@ import "../update_context/session_state_store.dart";
 
 /// Placeholder entrypoint for integrating Revclust into a Flutter app.
 class RevclustSdk {
+  static const String _invariantFailureTriggerType = "invariant_failure";
+
   /// Creates an SDK instance with static configuration.
   RevclustSdk({
     required this.config,
@@ -92,8 +94,6 @@ class RevclustSdk {
   static const String _previousSessionUncleanExitTriggerType =
       "previous_session_unclean_exit";
   static const String _checkpointTriggerType = checkpointTriggerType;
-  static const String _previousSessionUncleanExitReason =
-      "previous session ended uncleanly";
   static const String _lastCheckpointAgeMsKey = "last_checkpoint_age_ms";
 
   final String _sessionId;
@@ -130,7 +130,16 @@ class RevclustSdk {
     void Function(CaptureEnvelope envelope)? onCapture,
   }) async {
     await _initializePreviousSessionExitState(onCapture: onCapture);
+    return initializeUpdateContext(appVersion: appVersion);
+  }
 
+  /// Computes and persists update-context without previous-session handling.
+  ///
+  /// This is the narrow path used when a caller only needs build/version
+  /// reproduction conditions and has not opted into lifecycle exit capture.
+  Future<UpdateContextSnapshot> initializeUpdateContext({
+    String? appVersion,
+  }) async {
     final String? currentAppVersion = _resolveCurrentAppVersion(
       appVersion: appVersion,
     );
@@ -353,9 +362,11 @@ class RevclustSdk {
       updateContextSnapshot: _updateContextSnapshot,
       appVersion: config.appVersion,
       build: config.build,
+      gitSha: config.gitSha,
       deviceModel: runtimeConditions.deviceModel,
       osVersion: runtimeConditions.osVersion,
       networkType: runtimeConditions.networkType,
+      appReleaseStage: config.appReleaseStage,
       appState: stateSnapshot.appState,
       dataState: stateSnapshot.dataState,
     );
@@ -404,6 +415,28 @@ class RevclustSdk {
       observed: observed,
       signature: signature,
       triggerAttributes: triggerAttributes,
+    );
+  }
+
+  /// Captures an app-owned invariant failure using factual trigger fields.
+  CaptureEnvelope captureInvariantFailure({
+    required String failureKind,
+    required String subjectKind,
+    required String subjectValue,
+    required Object? expected,
+    required Object? observed,
+  }) {
+    return _captureWithTrigger(
+      triggerType: _invariantFailureTriggerType,
+      expected: expected,
+      observed: observed,
+      triggerAttributes: <String, Object?>{
+        "failure_kind": failureKind,
+        "subject": <String, Object?>{
+          "kind": subjectKind,
+          "value": subjectValue,
+        },
+      },
     );
   }
 
@@ -486,7 +519,7 @@ class RevclustSdk {
 
   CaptureEnvelope _captureWithTrigger({
     required String triggerType,
-    required String reason,
+    String? reason,
     Object? expected,
     Object? observed,
     String? signature,
@@ -521,8 +554,14 @@ class RevclustSdk {
   CaptureEnvelope _captureUnhandledException(Object error) {
     return _captureWithTrigger(
       triggerType: _unhandledExceptionTriggerType,
-      reason: error.runtimeType.toString(),
-      observed: _truncateString(error.toString(), _unhandledObservedMaxLength),
+      observed: <String, Object?>{
+        "exception_type": error.runtimeType.toString(),
+        "message":
+            _truncateString(error.toString(), _unhandledObservedMaxLength),
+      },
+      triggerAttributes: const <String, Object?>{
+        "failure_kind": _unhandledExceptionTriggerType,
+      },
     );
   }
 
@@ -581,8 +620,10 @@ class RevclustSdk {
 
     final CaptureEnvelope envelope = _captureWithTrigger(
       triggerType: _previousSessionUncleanExitTriggerType,
-      reason: _previousSessionUncleanExitReason,
       observed: observed,
+      triggerAttributes: const <String, Object?>{
+        "failure_kind": _previousSessionUncleanExitTriggerType,
+      },
     );
     onCapture?.call(envelope);
   }

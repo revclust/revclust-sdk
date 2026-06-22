@@ -6,142 +6,216 @@ import "package:dio/dio.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart";
 import "package:revclust_flutter_sdk/src/public/revclust_config.dart";
+import "package:revclust_flutter_sdk/src/public/revclust_diagnostics.dart";
 
-const String _liveProjectKey = "rpk_uC4n8XQvJ9tR2mLsY7pKdB3fW6zHaNe1";
-const String _missingProjectKey = "rpk_M2pQ8dLx7YvN1kTr4HsJc9_wZa6BgFe2";
+// Deliberately synthetic shape-valid test keys; never provision these.
+const String _liveProjectKey = "rpk_00000000000000000000000000000000";
+const String _missingProjectKey = "rpk_11111111111111111111111111111111";
 
 void main() {
-  test("hosted bootstrap success body matches the real pilot route contract",
+  test("default config posts key-only body to canonical bootstrap endpoint",
       () async {
     final _RecordingBootstrapAdapter adapter = _RecordingBootstrapAdapter(
       statusCode: 200,
-      responseBody: jsonEncode(<String, Object?>{
-        "ok": true,
-        "upload": <String, Object?>{
-          "endpoint": "http://127.0.0.1:3000/api/pilot/packs",
-          "auth_token": "pilot_upload_credential_team_a",
-          "usable_until": "2026-03-28T12:15:00.000Z",
-        },
-        "viewer_base_url": "http://127.0.0.1:3000/pilot/packs",
-      }),
+      responseBody: _successBody(
+        endpoint: "https://revclust.com/api/pilot/packs",
+        viewerBaseUrl: "https://revclust.com/pilot/packs",
+      ),
     );
-    final Dio dio = Dio()..httpClientAdapter = adapter;
-    final HttpRevclustBootstrapProbe probe = HttpRevclustBootstrapProbe(
-      dio: dio,
+    final HttpRevclustBootstrapProbe probe = _probeWithAdapter(
+      adapter,
       utcNow: () => DateTime.parse("2026-03-28T12:00:00.000Z"),
     );
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
       RevclustConfig(
         projectKey: _liveProjectKey,
-        environment: RevclustEnvironment.development,
+        releaseStage: RevclustAppReleaseStage.production,
+        appVersion: "1.2.3",
+        build: "1203",
+        gitSha: "ABCDEF1",
       ),
     );
 
     expect(assessment.disposition, RevclustBootstrapDisposition.ready);
     expect(
-      assessment.lease?.uploadEndpoint,
-      Uri.parse("http://127.0.0.1:3000/api/pilot/packs"),
-    );
-    expect(
-      assessment.lease?.authToken,
-      "pilot_upload_credential_team_a",
-    );
-    expect(
-      assessment.lease?.usableUntil,
-      DateTime.parse("2026-03-28T12:15:00.000Z"),
-    );
-    expect(
-      assessment.lease?.viewerBaseUrl,
-      Uri.parse("http://127.0.0.1:3000/pilot/packs"),
-    );
-    expect(
       adapter.lastRequestUri,
-      "http://127.0.0.1:3000/api/pilot/sdk/bootstrap",
+      "https://revclust.com/api/pilot/sdk/bootstrap",
     );
     expect(adapter.lastRequestMethod, "POST");
     expect(
       jsonDecode(adapter.lastRequestBody ?? "") as Map<String, Object?>,
       <String, Object?>{
         "project_key": _liveProjectKey,
-        "environment": "development",
       },
+    );
+    expect(
+      assessment.diagnostics?.bootstrapOrigin,
+      Uri.parse("https://revclust.com"),
+    );
+    expect(
+      assessment.diagnostics?.state,
+      RevclustBootstrapDiagnosticState.ready,
     );
   });
 
-  test("404 project_not_provisioned maps to notProvisioned", () async {
+  test("debug origin override changes only the bootstrap origin", () async {
+    final _RecordingBootstrapAdapter adapter = _RecordingBootstrapAdapter(
+      statusCode: 200,
+      responseBody: _successBody(
+        endpoint: "http://10.0.2.2:3000/api/pilot/packs",
+        viewerBaseUrl: "http://10.0.2.2:3000/pilot/packs",
+      ),
+    );
+    final HttpRevclustBootstrapProbe probe = _probeWithAdapter(
+      adapter,
+      utcNow: () => DateTime.parse("2026-03-28T12:00:00.000Z"),
+    );
+
+    final RevclustBootstrapAssessment assessment = await probe.assess(
+      RevclustConfig(
+        projectKey: _liveProjectKey,
+        releaseStage: RevclustAppReleaseStage.staging,
+        debugOptions: RevclustDebugOptions(
+          bootstrapOriginOverride: Uri.parse("http://10.0.2.2:3000/"),
+        ),
+      ),
+    );
+
+    expect(assessment.disposition, RevclustBootstrapDisposition.ready);
+    expect(
+      adapter.lastRequestUri,
+      "http://10.0.2.2:3000/api/pilot/sdk/bootstrap",
+    );
+    expect(
+      jsonDecode(adapter.lastRequestBody ?? "") as Map<String, Object?>,
+      <String, Object?>{
+        "project_key": _liveProjectKey,
+      },
+    );
+    expect(
+      assessment.diagnostics?.bootstrapOrigin,
+      Uri.parse("http://10.0.2.2:3000"),
+    );
+  });
+
+  test("invalid debug override URIs are rejected without leaking credentials",
+      () {
+    final Matcher argumentError = isA<ArgumentError>().having(
+      (ArgumentError error) => error.toString(),
+      "message",
+      allOf(
+        isNot(contains("user")),
+        isNot(contains("secret")),
+        isNot(contains("example.com")),
+      ),
+    );
+
+    expect(
+      () => RevclustDebugOptions(
+        bootstrapOriginOverride: Uri.parse("https://user:secret@example.com"),
+      ),
+      throwsA(argumentError),
+    );
+    expect(
+      () => RevclustDebugOptions(
+        bootstrapOriginOverride: Uri.parse("https://revclust.com/custom"),
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => RevclustDebugOptions(
+        bootstrapOriginOverride: Uri.parse("https://revclust.com?x=1"),
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test("404 project_not_provisioned maps to notProvisioned diagnostics",
+      () async {
     final HttpRevclustBootstrapProbe probe = _probeWithResponse(
       statusCode: 404,
       responseBody: jsonEncode(<String, Object?>{
         "ok": false,
         "error": <String, Object?>{
           "code": "project_not_provisioned",
-          "message":
-              "Project key is not provisioned for the selected environment.",
+          "message": "Project key is not provisioned.",
         },
       }),
     );
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
-      RevclustConfig(
-        projectKey: _missingProjectKey,
-        environment: RevclustEnvironment.development,
-      ),
+      RevclustConfig(projectKey: _missingProjectKey),
     );
 
     expect(
       assessment.disposition,
       RevclustBootstrapDisposition.notProvisioned,
     );
+    expect(assessment.message, "Project key is not provisioned.");
     expect(
-      assessment.message,
-      "Project key is not provisioned for the selected environment.",
+      assessment.diagnostics?.state,
+      RevclustBootstrapDiagnosticState.notProvisioned,
     );
+    expect(assessment.diagnostics?.lastHttpStatus, 404);
+    expect(assessment.diagnostics?.errorCategory, "project_not_provisioned");
+    expect(assessment.diagnostics?.retryable, isFalse);
   });
 
-  test("403 upload_auth_unavailable maps to uploadBlocked", () async {
+  test("403 upload_auth_unavailable maps to uploadBlocked diagnostics",
+      () async {
     final HttpRevclustBootstrapProbe probe = _probeWithResponse(
       statusCode: 403,
       responseBody: jsonEncode(<String, Object?>{
         "ok": false,
         "error": <String, Object?>{
           "code": "upload_auth_unavailable",
-          "message": "Pilot upload auth is temporarily blocked.",
+          "message": "Do not expose rpk_secret_value or upload_token_secret.",
         },
       }),
     );
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
-      RevclustConfig(
-        projectKey: _liveProjectKey,
-        environment: RevclustEnvironment.development,
-      ),
+      RevclustConfig(projectKey: _liveProjectKey),
     );
 
     expect(
       assessment.disposition,
       RevclustBootstrapDisposition.uploadBlocked,
     );
-    expect(assessment.message, "Pilot upload auth is temporarily blocked.");
+    expect(
+      assessment.message,
+      "Upload authorization could not be obtained right now.",
+    );
+    expect(
+      assessment.diagnostics?.state,
+      RevclustBootstrapDiagnosticState.uploadBlocked,
+    );
+    expect(assessment.diagnostics?.lastHttpStatus, 403);
+    expect(assessment.diagnostics?.errorCategory, "upload_auth_unavailable");
+    expect(assessment.diagnostics?.retryable, isTrue);
+    expect(
+      assessment.diagnostics?.message,
+      "Upload authorization could not be obtained right now.",
+    );
+    expect(assessment.diagnostics?.message, isNot(contains("rpk_secret")));
+    expect(assessment.diagnostics?.message, isNot(contains("upload_token")));
   });
 
-  test("400 invalid_project_key maps to misconfigured", () async {
+  test("400 invalid_project_key maps to misconfigured diagnostics", () async {
     final HttpRevclustBootstrapProbe probe = _probeWithResponse(
       statusCode: 400,
       responseBody: jsonEncode(<String, Object?>{
         "ok": false,
         "error": <String, Object?>{
           "code": "invalid_project_key",
-          "message": "Project key is missing or invalid for hosted bootstrap.",
+          "message": "Do not expose rpk_secret_value.",
         },
       }),
     );
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
-      RevclustConfig(
-        projectKey: _liveProjectKey,
-        environment: RevclustEnvironment.development,
-      ),
+      RevclustConfig(projectKey: _liveProjectKey),
     );
 
     expect(
@@ -150,8 +224,52 @@ void main() {
     );
     expect(
       assessment.message,
-      "Project key is missing or invalid for hosted bootstrap.",
+      "Project key is misconfigured.",
     );
+    expect(
+      assessment.diagnostics?.state,
+      RevclustBootstrapDiagnosticState.misconfigured,
+    );
+    expect(assessment.diagnostics?.lastHttpStatus, 400);
+    expect(assessment.diagnostics?.errorCategory, "invalid_project_key");
+    expect(assessment.diagnostics?.retryable, isFalse);
+    expect(assessment.diagnostics?.message, "Project key is misconfigured.");
+    expect(assessment.diagnostics?.message, isNot(contains("rpk_secret")));
+  });
+
+  test("unknown bootstrap error bodies do not leak messages or categories",
+      () async {
+    final HttpRevclustBootstrapProbe probe = _probeWithResponse(
+      statusCode: 503,
+      responseBody: jsonEncode(<String, Object?>{
+        "ok": false,
+        "error": <String, Object?>{
+          "code": "rpk_secret_code",
+          "message": "raw request body included rpk_secret_value",
+        },
+      }),
+    );
+
+    final RevclustBootstrapAssessment assessment = await probe.assess(
+      RevclustConfig(projectKey: _liveProjectKey),
+    );
+
+    expect(
+      assessment.disposition,
+      RevclustBootstrapDisposition.bootstrapUnavailable,
+    );
+    expect(
+      assessment.message,
+      "Hosted bootstrap could not be completed successfully.",
+    );
+    expect(
+      assessment.diagnostics?.message,
+      "Hosted bootstrap could not be completed successfully.",
+    );
+    expect(assessment.diagnostics?.errorCategory, "bootstrap_unavailable");
+    expect(assessment.diagnostics?.message, isNot(contains("rpk_secret")));
+    expect(
+        assessment.diagnostics?.errorCategory, isNot(contains("rpk_secret")));
   });
 }
 
@@ -207,15 +325,42 @@ HttpRevclustBootstrapProbe _probeWithResponse({
   required int statusCode,
   required String responseBody,
 }) {
+  return _probeWithAdapter(
+    _RecordingBootstrapAdapter(
+      statusCode: statusCode,
+      responseBody: responseBody,
+    ),
+  );
+}
+
+HttpRevclustBootstrapProbe _probeWithAdapter(
+  HttpClientAdapter adapter, {
+  DateTime Function()? utcNow,
+}) {
   final Dio dio = Dio(
     BaseOptions(
       responseType: ResponseType.json,
       validateStatus: (_) => true,
     ),
-  )..httpClientAdapter = _RecordingBootstrapAdapter(
-      statusCode: statusCode,
-      responseBody: responseBody,
-    );
+  )..httpClientAdapter = adapter;
 
-  return HttpRevclustBootstrapProbe(dio: dio);
+  return HttpRevclustBootstrapProbe(
+    dio: dio,
+    utcNow: utcNow,
+  );
+}
+
+String _successBody({
+  required String endpoint,
+  required String viewerBaseUrl,
+}) {
+  return jsonEncode(<String, Object?>{
+    "ok": true,
+    "upload": <String, Object?>{
+      "endpoint": endpoint,
+      "auth_token": "pilot_upload_credential_team_a",
+      "usable_until": "2026-03-28T12:15:00.000Z",
+    },
+    "viewer_base_url": viewerBaseUrl,
+  });
 }

@@ -4,7 +4,10 @@ import "dart:typed_data";
 import "package:dio/dio.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart" as low_level;
+import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart"
+    as compatibility;
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
+    as low_level;
 import "package:revclust_flutter_sdk/src/persistence/revclust_database_factory.dart";
 import "package:revclust_flutter_sdk/src/public/revclust.dart"
     as facade_internal;
@@ -14,7 +17,8 @@ import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
 import "support/in_memory_key_store.dart";
 import "support/public_facade_local_capture_factory.dart";
 
-const String _projectKey = "rpk_uC4n8XQvJ9tR2mLsY7pKdB3fW6zHaNe1";
+// Deliberately synthetic shape-valid test key; never provision this.
+const String _projectKey = "rpk_00000000000000000000000000000000";
 
 void main() {
   late TestPublicFacadeLocalCaptureFactory localCaptureFactory;
@@ -34,31 +38,27 @@ void main() {
   test("partner-facing entrypoint exposes the new facade types", () {
     final facade.RevclustConfig config = facade.RevclustConfig(
       projectKey: _projectKey,
-      environment: facade.RevclustEnvironment.staging,
+      releaseStage: facade.RevclustAppReleaseStage.staging,
+      appVersion: " 1.2.3 ",
+      build: " 1203 ",
+      gitSha: "ABCDEF1",
     );
-    final facade.RevclustIdentity identity = facade.RevclustIdentity(
-      kind: "order",
+    final facade.RevclustSubject subject = facade.RevclustSubject(
+      kind: "order_ref",
       value: "ord_123",
     );
-    final facade.RevclustTrigger trigger = facade.RevclustTrigger(
-      reason: "checkout confirmation mismatch",
+    final facade.RevclustInvariantFailure failure =
+        facade.RevclustInvariantFailure(
+      failureKind: "checkout_confirmation_mismatch",
+      subject: subject,
       expected: const <String, Object?>{"order_status": "confirmed"},
       observed: const <String, Object?>{"order_status": "retrying"},
-      identity: identity,
-      signature: "checkout_confirmation_mismatch",
-      flow: "checkout",
-      screen: "confirmation",
-      stepLabel: "confirm_order",
-      reproHint: "Retry checkout after a slow confirmation poll.",
-      relevantIds: const <String, String>{
-        "cart_id": "cart_123",
-      },
     );
     final facade.RevclustCaptureQueued queued =
         facade.RevclustCaptureQueued(captureId: "cap_123");
     final facade.RevclustCaptureOutcome blocked = facade.RevclustCaptureBlocked(
       status: facade.RevclustStatus.misconfigured,
-      message: "Project key is not provisioned for this environment.",
+      message: "Project key is not provisioned.",
     );
     final facade.RevclustCaptureBuildFailed buildFailed =
         facade.RevclustCaptureBuildFailed(
@@ -102,12 +102,29 @@ void main() {
     );
 
     expect(config.projectKey, _projectKey);
-    expect(config.environment, facade.RevclustEnvironment.staging);
-    expect(identity.kind, "order");
-    expect(identity.value, "ord_123");
-    expect(trigger.reason, "checkout confirmation mismatch");
-    expect(trigger.signature, "checkout_confirmation_mismatch");
-    expect(trigger.relevantIds["cart_id"], "cart_123");
+    expect(config.releaseStage, facade.RevclustAppReleaseStage.staging);
+    expect(config.appVersion, "1.2.3");
+    expect(config.build, "1203");
+    expect(config.gitSha, "abcdef1");
+    expect(config.debugOptions.bootstrapOriginOverride, isNull);
+    expect(
+      facade.RevclustAppReleaseStage.custom("preview_1").value,
+      "preview_1",
+    );
+    expect(
+      () => facade.RevclustAppReleaseStage.custom("Preview 1"),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(subject.kind, "order_ref");
+    expect(subject.value, "ord_123");
+    expect(failure.failureKind, "checkout_confirmation_mismatch");
+    expect(failure.subject, same(subject));
+    expect(failure.expected, const <String, Object?>{
+      "order_status": "confirmed",
+    });
+    expect(failure.observed, const <String, Object?>{
+      "order_status": "retrying",
+    });
 
     expect(queued.captureId, "cap_123");
     expect(buildFailed.captureId, "cap_456");
@@ -133,6 +150,146 @@ void main() {
     );
   });
 
+  test("compatibility entrypoint exposes the partner-facing facade", () {
+    final compatibility.RevclustInvariantFailure failure =
+        compatibility.RevclustInvariantFailure(
+      failureKind: "checkout_confirmation_mismatch",
+      subject: compatibility.RevclustSubject(
+        kind: "order_ref",
+        value: "ord_ref_7d82b1",
+      ),
+      expected: const <String, Object?>{"order_status": "confirmed"},
+      observed: const <String, Object?>{"order_status": "retrying"},
+    );
+
+    expect(failure.failureKind, "checkout_confirmation_mismatch");
+  });
+
+  test("invariant failure validates required factual fields", () {
+    facade.RevclustInvariantFailure validFailure() {
+      return facade.RevclustInvariantFailure(
+        failureKind: "checkout_confirmation_mismatch",
+        subject: facade.RevclustSubject(
+          kind: "order_ref",
+          value: "ord_ref_7d82b1",
+        ),
+        expected: const <String, Object?>{
+          "order_status": "confirmed",
+        },
+        observed: const <String, Object?>{
+          "order_status": "retrying",
+        },
+      );
+    }
+
+    expect(validFailure, returnsNormally);
+    expect(
+      () => facade.RevclustInvariantFailure(
+        failureKind: "Checkout confirmation mismatch",
+        subject: facade.RevclustSubject(
+          kind: "order_ref",
+          value: "ord_ref_7d82b1",
+        ),
+        expected: const <String, Object?>{"order_status": "confirmed"},
+        observed: const <String, Object?>{"order_status": "retrying"},
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustSubject(kind: "order ref", value: "ord_ref_7d82b1"),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustSubject(kind: "order_ref", value: " "),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustSubject(kind: "order_ref", value: "unknown"),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustSubject(
+        kind: "order_ref",
+        value: "unsafe value with spaces",
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustInvariantFailure(
+        failureKind: "checkout_confirmation_mismatch",
+        subject: facade.RevclustSubject(
+          kind: "order_ref",
+          value: "ord_ref_7d82b1",
+        ),
+        expected: const <String, Object?>{},
+        observed: const <String, Object?>{"order_status": "retrying"},
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustInvariantFailure(
+        failureKind: "checkout_confirmation_mismatch",
+        subject: facade.RevclustSubject(
+          kind: "order_ref",
+          value: "ord_ref_7d82b1",
+        ),
+        expected: const <String, Object?>{"order_status": "confirmed"},
+        observed: const <String, Object?>{},
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustInvariantFailure(
+        failureKind: "checkout_confirmation_mismatch",
+        subject: facade.RevclustSubject(
+          kind: "order_ref",
+          value: "ord_ref_7d82b1",
+        ),
+        expected: const <String, Object?>{"Order status": "confirmed"},
+        observed: const <String, Object?>{"order_status": "retrying"},
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustInvariantFailure(
+        failureKind: "checkout_confirmation_mismatch",
+        subject: facade.RevclustSubject(
+          kind: "order_ref",
+          value: "ord_ref_7d82b1",
+        ),
+        expected: <String, Object?>{"order_status": double.nan},
+        observed: const <String, Object?>{"order_status": "retrying"},
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustInvariantFailure(
+        failureKind: "checkout_confirmation_mismatch",
+        subject: facade.RevclustSubject(
+          kind: "order_ref",
+          value: "ord_ref_7d82b1",
+        ),
+        expected: <String, Object?>{"order_status": Object()},
+        observed: const <String, Object?>{"order_status": "retrying"},
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustInvariantFailure(
+        failureKind: "checkout_confirmation_mismatch",
+        subject: facade.RevclustSubject(
+          kind: "order_ref",
+          value: "ord_ref_7d82b1",
+        ),
+        expected: <String, Object?>{
+          "order_status": "x".padRight(257, "x"),
+        },
+        observed: const <String, Object?>{"order_status": "retrying"},
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
   test(
       "partner-facing initialize returns a degraded app-scoped facade by default",
       () async {
@@ -153,6 +310,14 @@ void main() {
 
     expect(second, same(first));
     expect(first.status, facade.RevclustStatus.degraded);
+    expect(
+      first.diagnostics.bootstrap.state,
+      facade.RevclustBootstrapDiagnosticState.unavailable,
+    );
+    expect(
+      first.diagnostics.bootstrap.bootstrapOrigin,
+      Uri.parse("https://revclust.com"),
+    );
     expect(first.uploadSnapshot.pendingCount, 0);
     expect(first.uploadSnapshot.uploadingCount, 0);
     expect(
@@ -163,20 +328,68 @@ void main() {
   });
 
   test("local storage scope ids stay stable for project hashing", () {
-    final facade.RevclustConfig config = facade.RevclustConfig(
-      projectKey: _projectKey,
-      environment: facade.RevclustEnvironment.development,
-    );
+    final facade.RevclustConfig config =
+        facade.RevclustConfig(projectKey: _projectKey);
 
     expect(
       facade_internal.RevclustFacadeTestSupport.localStorageDatabaseFileName(
         config,
       ),
-      "revclust_public_facade_development_4be5469f7d1c900b.db",
+      "revclust_public_facade_ca50da2a78f75d99.db",
     );
     expect(
       facade_internal.RevclustFacadeTestSupport.localStorageKey(config),
-      "revclust_public_facade_encryption_key_development_4be5469f7d1c900b",
+      "revclust_public_facade_encryption_key_ca50da2a78f75d99",
+    );
+  });
+
+  test("local storage scope ignores build metadata", () {
+    final facade.RevclustConfig first = facade.RevclustConfig(
+      projectKey: _projectKey,
+      releaseStage: facade.RevclustAppReleaseStage.production,
+      appVersion: "1.2.3",
+      build: "1203",
+      gitSha: "abcdef1",
+    );
+    final facade.RevclustConfig second = facade.RevclustConfig(
+      projectKey: _projectKey,
+      releaseStage: facade.RevclustAppReleaseStage.staging,
+      appVersion: "1.2.4",
+      build: "1204",
+      gitSha: "abcdef2",
+    );
+
+    expect(first, isNot(second));
+    expect(
+      facade_internal.RevclustFacadeTestSupport.localStorageDatabaseFileName(
+        first,
+      ),
+      facade_internal.RevclustFacadeTestSupport.localStorageDatabaseFileName(
+        second,
+      ),
+    );
+    expect(
+      facade_internal.RevclustFacadeTestSupport.localStorageKey(first),
+      facade_internal.RevclustFacadeTestSupport.localStorageKey(second),
+    );
+  });
+
+  test("config rejects invalid build metadata", () {
+    expect(
+      () => facade.RevclustConfig(projectKey: _projectKey, appVersion: "   "),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustConfig(projectKey: _projectKey, build: "   "),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustConfig(projectKey: _projectKey, gitSha: "   "),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => facade.RevclustConfig(projectKey: _projectKey, gitSha: "not-a-sha"),
+      throwsA(isA<ArgumentError>()),
     );
   });
 
@@ -245,7 +458,7 @@ void main() {
     );
   });
 
-  test("legacy low-level entrypoint remains available", () {
+  test("internal low-level entrypoint remains available for SDK tests", () {
     final low_level.SdkConfig config = low_level.SdkConfig();
     final low_level.RevclustSdk sdk = low_level.RevclustSdk(config: config);
 

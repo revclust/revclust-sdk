@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 
 final RegExp _uuidV4Pattern = RegExp(
   r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -78,14 +78,20 @@ void main() {
     expect(() => SdkConfig(maxStateBytes: 0), throwsA(isA<ArgumentError>()));
     expect(() => SdkConfig(maxStringLen: 0), throwsA(isA<ArgumentError>()));
     expect(() => SdkConfig(build: "   "), throwsA(isA<ArgumentError>()));
+    expect(() => SdkConfig(gitSha: "   "), throwsA(isA<ArgumentError>()));
+    expect(() => SdkConfig(gitSha: "not-a-sha"), throwsA(isA<ArgumentError>()));
   });
 
-  test("sdk config normalizes optional build", () {
+  test("sdk config normalizes optional build metadata", () {
     final SdkConfig config = SdkConfig(
+      appVersion: "  1.2.3  ",
       build: "  2026.03.04  ",
+      gitSha: "  ABCDEF1  ",
       stateHashSalt: "  project-salt  ",
     );
+    expect(config.appVersion, "1.2.3");
     expect(config.build, "2026.03.04");
+    expect(config.gitSha, "abcdef1");
     expect(config.stateHashSalt, "project-salt");
   });
 

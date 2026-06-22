@@ -3,7 +3,8 @@ import "dart:async";
 import "package:dio/dio.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart" as low_level;
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
+    as low_level;
 import "package:revclust_flutter_sdk/src/public/revclust.dart"
     as facade_internal;
 import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
@@ -11,10 +12,11 @@ import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
 
 import "support/public_facade_local_capture_factory.dart";
 
-const String _defaultProjectKey = "rpk_uC4n8XQvJ9tR2mLsY7pKdB3fW6zHaNe1";
-const String _firstProjectKey = "rpk_Q7mN2xLd8KpR4vTsc1Jw9_yBh5DfGzA3";
-const String _recoveredProjectKey = "rpk_M2pQ8dLx7YvN1kTr4HsJc9_wZa6BgFe2";
-const String _conflictingProjectKey = "rpk_V9qL3nWx2TbK7mRsd4HjC8_aYp6FgZe1";
+// Deliberately synthetic shape-valid test keys; never provision these.
+const String _defaultProjectKey = "rpk_00000000000000000000000000000000";
+const String _firstProjectKey = "rpk_11111111111111111111111111111111";
+const String _recoveredProjectKey = "rpk_22222222222222222222222222222222";
+const String _conflictingProjectKey = "rpk_33333333333333333333333333333333";
 
 void main() {
   late TestPublicFacadeLocalCaptureFactory localCaptureFactory;
@@ -265,8 +267,8 @@ void main() {
         facade.RevclustUploadErrorCode.transportUnavailable,
       );
 
-      final facade.RevclustCaptureQueued queued =
-          (await revclust.capture(_trigger())) as facade.RevclustCaptureQueued;
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
 
       expect(queued.captureId, isNotEmpty);
       expect(revclust.status, facade.RevclustStatus.degraded);
@@ -274,6 +276,71 @@ void main() {
       expect(
         revclust.uploadSnapshot.lastErrorCode,
         facade.RevclustUploadErrorCode.transportUnavailable,
+      );
+    });
+
+    test("degraded diagnostics update after a later ready recovery", () async {
+      int bootstrapCalls = 0;
+      facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
+          _FakeBootstrapProbe((_) async {
+        bootstrapCalls += 1;
+        if (bootstrapCalls == 1) {
+          return facade_internal.RevclustBootstrapAssessment
+              .bootstrapUnavailable(
+            message: "Bootstrap is unavailable.",
+            diagnostics: facade.RevclustBootstrapDiagnostics(
+              state: facade.RevclustBootstrapDiagnosticState.unavailable,
+              bootstrapOrigin: Uri.parse("https://revclust.com"),
+              lastCheckedAt: DateTime.parse("2026-03-28T12:00:00Z"),
+              errorCategory: "transport_unavailable",
+              retryable: true,
+              message: "Hosted bootstrap could not be reached.",
+            ),
+          );
+        }
+        return _readyAssessment(
+          diagnostics: facade.RevclustBootstrapDiagnostics(
+            state: facade.RevclustBootstrapDiagnosticState.ready,
+            bootstrapOrigin: Uri.parse("https://revclust.com"),
+            lastCheckedAt: DateTime.parse("2026-03-28T12:01:00Z"),
+            lastHttpStatus: 200,
+            retryable: false,
+          ),
+        );
+      });
+
+      final facade.Revclust revclust = await facade.Revclust.initialize(
+        _config(),
+      );
+
+      expect(revclust.status, facade.RevclustStatus.degraded);
+      expect(
+        revclust.diagnostics.bootstrap.state,
+        facade.RevclustBootstrapDiagnosticState.unavailable,
+      );
+      expect(
+        revclust.diagnostics.bootstrap.message,
+        "Hosted bootstrap could not be reached.",
+      );
+
+      await facade_internal.RevclustFacadeTestSupport.refreshBootstrap(
+        revclust,
+      );
+
+      expect(revclust.status, facade.RevclustStatus.ready);
+      expect(
+        revclust.diagnostics.bootstrap.state,
+        facade.RevclustBootstrapDiagnosticState.ready,
+      );
+      expect(revclust.diagnostics.bootstrap.lastHttpStatus, 200);
+      expect(revclust.diagnostics.bootstrap.errorCategory, isNull);
+      expect(revclust.diagnostics.bootstrap.retryable, isFalse);
+      expect(
+        <String?>[
+          revclust.diagnostics.bootstrap.errorCategory,
+          revclust.diagnostics.bootstrap.message,
+        ].join(" "),
+        isNot(contains(_defaultProjectKey)),
       );
     });
 
@@ -291,8 +358,9 @@ void main() {
         facade.RevclustUploadErrorCode.misconfiguration,
       );
 
-      final facade.RevclustCaptureBlocked blocked = (await revclust
-          .captureManual(_trigger())) as facade.RevclustCaptureBlocked;
+      final facade.RevclustCaptureBlocked blocked =
+          (await revclust.captureInvariantFailure(_failure()))
+              as facade.RevclustCaptureBlocked;
 
       expect(blocked.status, facade.RevclustStatus.misconfigured);
       expect(blocked.message, contains("misconfigured"));
@@ -313,7 +381,8 @@ void main() {
       );
 
       final facade.RevclustCaptureBlocked blocked =
-          (await revclust.capture(_trigger())) as facade.RevclustCaptureBlocked;
+          (await revclust.captureInvariantFailure(_failure()))
+              as facade.RevclustCaptureBlocked;
 
       expect(blocked.status, facade.RevclustStatus.notProvisioned);
       expect(blocked.message, contains("not provisioned"));
@@ -333,8 +402,9 @@ void main() {
         facade.RevclustUploadErrorCode.auth,
       );
 
-      final facade.RevclustCaptureOutcome outcome = await revclust.capture(
-        _trigger(),
+      final facade.RevclustCaptureOutcome outcome =
+          await revclust.captureInvariantFailure(
+        _failure(),
       );
 
       expect(outcome, isA<facade.RevclustCaptureQueued>());
@@ -354,8 +424,8 @@ void main() {
         _readyAssessment(),
       );
 
-      final facade.RevclustCaptureQueued queued =
-          (await revclust.capture(_trigger())) as facade.RevclustCaptureQueued;
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
 
       expect(queued.captureId, isNotEmpty);
       expect(revclust.status, facade.RevclustStatus.ready);
@@ -382,7 +452,8 @@ void main() {
           facade_internal.RevclustFacadeTestSupport.currentFacade!;
 
       final facade.RevclustCaptureBlocked blocked =
-          (await revclust.capture(_trigger())) as facade.RevclustCaptureBlocked;
+          (await revclust.captureInvariantFailure(_failure()))
+              as facade.RevclustCaptureBlocked;
 
       expect(blocked.status, facade.RevclustStatus.initializing);
       expect(blocked.message, contains("initializing"));
@@ -423,24 +494,21 @@ void main() {
 
 facade.RevclustConfig _config({
   String projectKey = _defaultProjectKey,
-  facade.RevclustEnvironment environment = facade.RevclustEnvironment.staging,
 }) {
   return facade.RevclustConfig(
     projectKey: projectKey,
-    environment: environment,
   );
 }
 
-facade.RevclustTrigger _trigger() {
-  return facade.RevclustTrigger(
-    reason: "checkout confirmation mismatch",
-    expected: <String, Object?>{"order_status": "confirmed"},
-    observed: <String, Object?>{"order_status": "retrying"},
-    identity: facade.RevclustIdentity(
-      kind: "order",
+facade.RevclustInvariantFailure _failure() {
+  return facade.RevclustInvariantFailure(
+    failureKind: "checkout_confirmation_mismatch",
+    subject: facade.RevclustSubject(
+      kind: "order_ref",
       value: "ord_123",
     ),
-    signature: "checkout_confirmation_mismatch",
+    expected: <String, Object?>{"order_status": "confirmed"},
+    observed: <String, Object?>{"order_status": "retrying"},
   );
 }
 
@@ -452,7 +520,9 @@ Future<facade.Revclust> _initializeWithAssessment(
   return facade.Revclust.initialize(_config());
 }
 
-facade_internal.RevclustBootstrapAssessment _readyAssessment() {
+facade_internal.RevclustBootstrapAssessment _readyAssessment({
+  facade.RevclustBootstrapDiagnostics? diagnostics,
+}) {
   return facade_internal.RevclustBootstrapAssessment.ready(
     lease: facade_internal.RevclustBootstrapLease(
       uploadEndpoint: Uri.parse("https://revclust.com/api/pilot/packs"),
@@ -460,6 +530,7 @@ facade_internal.RevclustBootstrapAssessment _readyAssessment() {
       usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
       viewerBaseUrl: Uri.parse("https://revclust.com/pilot/packs"),
     ),
+    diagnostics: diagnostics,
   );
 }
 

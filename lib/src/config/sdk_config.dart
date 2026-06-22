@@ -16,6 +16,8 @@ class SdkConfig {
     String? stateHashSalt,
     String? appVersion,
     String? build,
+    String? gitSha,
+    String? appReleaseStage,
   })  : sessionSampleRate = (sessionSampleRate < 0 || sessionSampleRate > 1)
             ? throw ArgumentError.value(
                 sessionSampleRate,
@@ -77,6 +79,14 @@ class SdkConfig {
           build,
           "build",
         ),
+        gitSha = _normalizeOptionalGitSha(
+          gitSha,
+          "gitSha",
+        ),
+        appReleaseStage = _normalizeOptionalNonEmptyString(
+          appReleaseStage,
+          "appReleaseStage",
+        ),
         logger = logger ?? defaultSdkLogger;
 
   /// Toggles SDK activity at runtime.
@@ -114,6 +124,27 @@ class SdkConfig {
 
   /// Current build identifier available for future pack conditions.
   final String? build;
+
+  /// Optional source revision attached to captured pack conditions.
+  final String? gitSha;
+
+  /// Partner app release-stage metadata attached to captured packs.
+  final String? appReleaseStage;
+
+  static final RegExp _gitShaPattern = RegExp(r"^[0-9a-f]{7,40}$");
+
+  static String? _normalizeOptionalGitSha(String? value, String name) {
+    final String? normalized =
+        _normalizeOptionalNonEmptyString(value, name)?.toLowerCase();
+    if (normalized == null) {
+      return null;
+    }
+    if (!_gitShaPattern.hasMatch(normalized)) {
+      throw ArgumentError.value(
+          value, name, "must be a 7-40 character hex SHA");
+    }
+    return normalized;
+  }
 
   static String? _normalizeOptionalNonEmptyString(String? value, String name) {
     if (value == null) {

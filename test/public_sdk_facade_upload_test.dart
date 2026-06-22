@@ -3,7 +3,8 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart" as low_level;
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
+    as low_level;
 import "package:revclust_flutter_sdk/src/public/revclust.dart"
     as facade_internal;
 import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
@@ -13,9 +14,10 @@ import "package:sqflite_common_ffi/sqflite_ffi.dart";
 import "support/in_memory_key_store.dart";
 import "support/public_facade_local_capture_factory.dart";
 
-const String _defaultProjectKey = "rpk_uC4n8XQvJ9tR2mLsY7pKdB3fW6zHaNe1";
-const String _misconfiguredProjectKey = "rpk_V9qL3nWx2TbK7mRsd4HjC8_aYp6FgZe1";
-const String _missingProjectKey = "rpk_Q7mN2xLd8KpR4vTsc1Jw9_yBh5DfGzA3";
+// Deliberately synthetic shape-valid test keys; never provision these.
+const String _defaultProjectKey = "rpk_00000000000000000000000000000000";
+const String _misconfiguredProjectKey = "rpk_11111111111111111111111111111111";
+const String _missingProjectKey = "rpk_22222222222222222222222222222222";
 
 void main() {
   late int clockMs;
@@ -79,8 +81,8 @@ void main() {
         snapshotsAtEvents.add(revclust.uploadSnapshot);
       });
 
-      final facade.RevclustCaptureQueued queued =
-          (await revclust.capture(_trigger())) as facade.RevclustCaptureQueued;
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
 
       await _waitFor(() async {
         return events.length == 2 &&
@@ -134,8 +136,9 @@ void main() {
           <facade.RevclustUploadEvent>[];
       revclust.uploadEvents.listen(events.add);
 
-      final facade.RevclustCaptureOutcome outcome = await revclust.capture(
-        _trigger(),
+      final facade.RevclustCaptureOutcome outcome =
+          await revclust.captureInvariantFailure(
+        _failure(),
       );
       await _drainEventQueue();
 
@@ -163,8 +166,9 @@ void main() {
             result: buildSeededPackResult(captureId: "cap_seeded_001"),
             metadata: low_level.LocalPendingCaptureMetadata(
               captureId: "cap_seeded_001",
-              identityKind: "order",
-              identityValue: "ord_seeded",
+              failureKind: "checkout_confirmation_mismatch",
+              subjectKind: "order_ref",
+              subjectValue: "ord_seeded",
             ),
           ),
         ],
@@ -257,8 +261,8 @@ void main() {
           <facade.RevclustUploadEvent>[];
       revclust.uploadEvents.listen(events.add);
 
-      final facade.RevclustCaptureQueued queued =
-          (await revclust.capture(_trigger())) as facade.RevclustCaptureQueued;
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
       await _waitFor(() async => events.length == 2);
 
       final low_level.LocalPackRecord? record =
@@ -329,7 +333,7 @@ void main() {
         snapshots.add(revclust.uploadSnapshot);
       });
 
-      await revclust.capture(_trigger());
+      await revclust.captureInvariantFailure(_failure());
       await _waitFor(() async => events.length == 4);
 
       expect(events[0], isA<facade.RevclustUploadStarted>());
@@ -380,8 +384,8 @@ void main() {
           <facade.RevclustUploadEvent>[];
       revclust.uploadEvents.listen(events.add);
 
-      final facade.RevclustCaptureQueued queued =
-          (await revclust.capture(_trigger())) as facade.RevclustCaptureQueued;
+      final facade.RevclustCaptureQueued queued = (await revclust
+          .captureInvariantFailure(_failure())) as facade.RevclustCaptureQueued;
       await _waitFor(() async => events.length == 4);
 
       final low_level.LocalPackRecord? record =
@@ -426,7 +430,7 @@ void main() {
           <facade.RevclustUploadEvent>[];
       revclust.uploadEvents.listen(events.add);
 
-      await revclust.capture(_trigger());
+      await revclust.captureInvariantFailure(_failure());
       await _waitFor(() async => events.length == 2);
 
       expect(revclust.status, facade.RevclustStatus.uploadBlocked);
@@ -469,7 +473,7 @@ void main() {
           <facade.RevclustUploadEvent>[];
       firstFacade.uploadEvents.listen(firstEvents.add);
 
-      await firstFacade.capture(_trigger());
+      await firstFacade.captureInvariantFailure(_failure());
       await _waitFor(() async => firstEvents.length == 1);
       expect(firstEvents.single, isA<facade.RevclustUploadStarted>());
       expect(await localCaptureFactory.countPending(), 0);
@@ -721,7 +725,7 @@ void main() {
           <facade.RevclustUploadEvent>[];
       revclust.uploadEvents.listen(events.add);
 
-      await revclust.capture(_trigger());
+      await revclust.captureInvariantFailure(_failure());
       await _waitFor(() async {
         return uploadTransport.callCount == 1 &&
             revclust.uploadSnapshot.uploadingCount == 1 &&
@@ -824,27 +828,21 @@ void main() {
 
 facade.RevclustConfig _config({
   String projectKey = _defaultProjectKey,
-  facade.RevclustEnvironment environment = facade.RevclustEnvironment.staging,
 }) {
   return facade.RevclustConfig(
     projectKey: projectKey,
-    environment: environment,
   );
 }
 
-facade.RevclustTrigger _trigger() {
-  return facade.RevclustTrigger(
-    reason: "checkout confirmation mismatch",
-    expected: <String, Object?>{"order_status": "confirmed"},
-    observed: <String, Object?>{"order_status": "retrying"},
-    identity: facade.RevclustIdentity(
-      kind: "order",
+facade.RevclustInvariantFailure _failure() {
+  return facade.RevclustInvariantFailure(
+    failureKind: "checkout_confirmation_mismatch",
+    subject: facade.RevclustSubject(
+      kind: "order_ref",
       value: "ord_123",
     ),
-    signature: "checkout_confirmation_mismatch",
-    flow: "checkout",
-    screen: "confirmation",
-    stepLabel: "confirm_order",
+    expected: <String, Object?>{"order_status": "confirmed"},
+    observed: <String, Object?>{"order_status": "retrying"},
   );
 }
 

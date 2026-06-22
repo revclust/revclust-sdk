@@ -4,7 +4,9 @@ import "package:flutter/material.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart";
 
 const String _projectKey = String.fromEnvironment("REVCLUST_PROJECT_KEY");
-const String _environmentName = String.fromEnvironment("REVCLUST_ENVIRONMENT");
+const String _appVersion = String.fromEnvironment("REVCLUST_APP_VERSION");
+const String _build = String.fromEnvironment("REVCLUST_BUILD");
+const String _gitSha = String.fromEnvironment("REVCLUST_GIT_SHA");
 
 void main() {
   runApp(const RevclustQuickstartApp());
@@ -35,8 +37,6 @@ class QuickstartHomeScreen extends StatefulWidget {
 
 class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
   final List<String> _eventLog = <String>[];
-  final RevclustEnvironment? _configuredEnvironment =
-      _resolveConfiguredEnvironment();
 
   Revclust? _revclust;
   StreamSubscription<RevclustUploadEvent>? _uploadEventsSubscription;
@@ -45,8 +45,7 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
   String? _activityMessage;
   String? _viewerUrl;
 
-  bool get _hasBuildTimeConfig =>
-      _projectKey.isNotEmpty && _configuredEnvironment != null;
+  bool get _hasBuildTimeConfig => _projectKey.isNotEmpty;
 
   bool get _canInitialize =>
       _hasBuildTimeConfig && !_initializing && _revclust == null;
@@ -60,11 +59,9 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
   }
 
   Future<void> _initializeSdk() async {
-    final RevclustEnvironment? environment = _configuredEnvironment;
-    if (_projectKey.isEmpty || environment == null) {
+    if (!_hasBuildTimeConfig) {
       setState(() {
-        _activityMessage =
-            "Provide REVCLUST_PROJECT_KEY and REVCLUST_ENVIRONMENT via --dart-define to enable the quickstart flow.";
+        _activityMessage = _missingConfigMessage;
       });
       return;
     }
@@ -76,7 +73,12 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
 
     try {
       final Revclust revclust = await Revclust.initialize(
-        RevclustConfig(projectKey: _projectKey, environment: environment),
+        RevclustConfig(
+          projectKey: _projectKey,
+          appVersion: _optionalBuildValue(_appVersion),
+          build: _optionalBuildValue(_build),
+          gitSha: _optionalBuildValue(_gitSha),
+        ),
       );
 
       revclust.setStateSnapshotProvider(
@@ -135,7 +137,7 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
       RevclustStatus.degraded || RevclustStatus.uploadBlocked =>
         "SDK initialized with status ${status.name}. Local capture can queue, but upload is not ready.",
       RevclustStatus.misconfigured || RevclustStatus.notProvisioned =>
-        "SDK initialized with status ${status.name}. Check the project key, environment, and onboarding setup.",
+        "SDK initialized with status ${status.name}. Check the project key and onboarding setup.",
       RevclustStatus.disabled || RevclustStatus.initializing =>
         "SDK initialized with status ${status.name}.",
     };
@@ -154,24 +156,13 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
     });
 
     try {
-      final RevclustCaptureOutcome outcome = await revclust.capture(
-        RevclustTrigger(
-          reason: "Checkout confirmation did not match the expected status.",
-          identity: RevclustIdentity(
-            kind: "order_ref",
-            value: "ord_ref_7d82b1",
-          ),
-          expected: "confirmed",
-          observed: "pending_review",
-          flow: "checkout_confirmation",
-          screen: "QuickstartHomeScreen",
-          stepLabel: "submit_order",
-          reproHint:
-              "Tap Queue Sample Incident after a successful SDK bootstrap.",
-          relevantIds: const <String, String>{
-            "order_ref": "ord_ref_7d82b1",
-            "customer_ref": "cust_ref_42a1",
-          },
+      final RevclustCaptureOutcome
+      outcome = await revclust.captureInvariantFailure(
+        RevclustInvariantFailure(
+          failureKind: "checkout_confirmation_mismatch",
+          subject: RevclustSubject(kind: "order_ref", value: "ord_ref_7d82b1"),
+          expected: const <String, Object?>{"order_status": "confirmed"},
+          observed: const <String, Object?>{"order_status": "pending_review"},
         ),
       );
 
@@ -293,22 +284,16 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
           ),
           const SizedBox(height: 16),
           _Section(
-            title: "Build-time configuration",
+            title: "Configuration",
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
                   "Project key: ${_projectKey.isEmpty ? "missing" : _maskProjectKey(_projectKey)}",
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  "Environment: ${_configuredEnvironment?.name ?? (_environmentName.isEmpty ? "missing" : "unsupported ($_environmentName)")}",
-                ),
                 if (!_hasBuildTimeConfig) ...<Widget>[
                   const SizedBox(height: 12),
-                  const Text(
-                    "Provide REVCLUST_PROJECT_KEY and REVCLUST_ENVIRONMENT via --dart-define to enable the quickstart flow.",
-                  ),
+                  Text(_missingConfigMessage),
                 ],
               ],
             ),
@@ -408,13 +393,14 @@ class _Section extends StatelessWidget {
   }
 }
 
-RevclustEnvironment? _resolveConfiguredEnvironment() {
-  return switch (_environmentName) {
-    "development" => RevclustEnvironment.development,
-    "staging" => RevclustEnvironment.staging,
-    "production" => RevclustEnvironment.production,
-    _ => null,
-  };
+String get _missingConfigMessage =>
+    "Provide REVCLUST_PROJECT_KEY via --dart-define to enable the quickstart flow.";
+
+String? _optionalBuildValue(String value) {
+  if (value.isEmpty) {
+    return null;
+  }
+  return value;
 }
 
 String _maskProjectKey(String value) {

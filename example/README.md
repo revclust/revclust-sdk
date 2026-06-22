@@ -5,10 +5,10 @@ This example mirrors the current managed mobile pilot onboarding path for
 
 It shows the minimum integration shape:
 
-- read the Revclust project key and environment from `--dart-define`
+- read the Revclust project key from `--dart-define`
 - initialize `Revclust`
 - register a small reviewed state snapshot provider
-- trigger one explicit sample incident and watch upload events
+- capture one explicit sample invariant failure and watch upload events
 
 The default quickstart is for Flutter mobile on `iOS` and `Android` only. It
 does not enable automatic `Dio` or unhandled-exception hooks.
@@ -22,12 +22,21 @@ From this directory:
 ```bash
 flutter pub get
 flutter run \
-  --dart-define=REVCLUST_PROJECT_KEY=rpk_... \
-  --dart-define=REVCLUST_ENVIRONMENT=staging
+  --dart-define=REVCLUST_PROJECT_KEY=rpk_...
 ```
 
-Replace the `rpk_...` key and environment with the values provisioned for your
-team during onboarding.
+Replace the `rpk_...` key with the value provisioned for your team during
+onboarding.
+
+Optional build metadata can be supplied by your existing build or CI system:
+
+```bash
+flutter run \
+  --dart-define=REVCLUST_PROJECT_KEY=rpk_... \
+  --dart-define=REVCLUST_APP_VERSION=1.4.2 \
+  --dart-define=REVCLUST_BUILD=14207 \
+  --dart-define=REVCLUST_GIT_SHA=abc1234
+```
 
 ## What To Expect
 
@@ -39,5 +48,5 @@ team during onboarding.
 5. If the accepted event includes a viewer URL, open that incident in the
    Revclust viewer.
 
-If the app starts without the required `--dart-define` values, it stays in an
+If the app starts without the required project key, it stays in an
 offline quickstart mode and explains what configuration is missing.

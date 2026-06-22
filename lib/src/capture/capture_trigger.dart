@@ -2,21 +2,21 @@
 class CaptureTrigger {
   CaptureTrigger({
     required String type,
-    required String reason,
+    String? reason,
     this.expected,
     this.observed,
     String? signature,
     Map<String, Object?> attributes = const <String, Object?>{},
   })  : type = _normalizeRequiredString(type, "type"),
-        reason = _normalizeRequiredString(reason, "reason"),
+        reason = _normalizeOptionalString(reason, "reason"),
         signature = _normalizeOptionalString(signature, "signature"),
         attributes = Map<String, Object?>.unmodifiable(attributes);
 
   /// Trigger category (for example: `manual`, `programmatic`).
   final String type;
 
-  /// Human-readable trigger reason.
-  final String reason;
+  /// Optional SDK-owned legacy trigger reason.
+  final String? reason;
 
   /// Optional expected oracle value.
   final Object? expected;

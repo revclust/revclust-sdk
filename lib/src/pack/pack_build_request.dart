@@ -12,6 +12,7 @@ class PackBuildRequest {
     this.deviceModel,
     this.osVersion,
     this.networkType,
+    this.appReleaseStage,
     this.rttBucket,
     this.quality,
     this.gitSha,
@@ -36,6 +37,7 @@ class PackBuildRequest {
   final String? deviceModel;
   final String? osVersion;
   final String? networkType;
+  final String? appReleaseStage;
 
   /// Optional condition inputs.
   final String? rttBucket;

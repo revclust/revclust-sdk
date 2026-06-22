@@ -1,7 +1,6 @@
 /// Partner-facing Revclust Flutter facade types.
 ///
-/// This entrypoint is the hosted-first public surface. The existing low-level
-/// SDK remains available from `revclust_flutter_sdk.dart`.
+/// This entrypoint is the hosted-first, facts-first public surface.
 library;
 
 export "src/public/public.dart";

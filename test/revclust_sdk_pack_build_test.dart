@@ -2,7 +2,7 @@ import "dart:convert";
 
 import "package:cryptography/cryptography.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart";
+import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 import "package:sqflite_common_ffi/sqflite_ffi.dart";
 
 import "support/in_memory_key_store.dart";
@@ -27,7 +27,11 @@ void main() {
         ],
       );
       final RevclustSdk sdk = RevclustSdk(
-        config: SdkConfig(appVersion: "2.4.0", build: "24001"),
+        config: SdkConfig(
+          appVersion: "2.4.0",
+          build: "24001",
+          gitSha: "ABCDEF1",
+        ),
         monotonicClockMs: () => 5000,
         runtimeConditionsProvider: provider,
       );
@@ -46,6 +50,7 @@ void main() {
       );
       expect(conditions["app_version"], "2.4.0");
       expect(conditions["build"], "24001");
+      expect(conditions["git_sha"], "abcdef1");
       expect(conditions["device_model"], "Pixel 9 Pro");
       expect(conditions["os_version"], "Android 16");
       expect(conditions["network_type"], "wifi");

@@ -6,12 +6,14 @@ import "package:dio/dio.dart";
 import "../persistence/local_pack_repository.dart";
 import "../state/state_snapshot.dart";
 import "revclust_bootstrap.dart";
+import "revclust_bootstrap_origin.dart";
 import "revclust_capture_outcome.dart";
 import "revclust_config.dart";
+import "revclust_diagnostics.dart";
+import "revclust_invariant_failure.dart";
 import "revclust_local_capture.dart";
 import "revclust_owned_upload.dart";
 import "revclust_status.dart";
-import "revclust_trigger.dart";
 import "revclust_upload_event.dart";
 import "revclust_upload_snapshot.dart";
 
@@ -29,14 +31,33 @@ abstract interface class Revclust {
   /// Current best-known upload queue or upload state.
   RevclustUploadSnapshot get uploadSnapshot;
 
+  /// Current privacy-safe diagnostics snapshot.
+  RevclustDiagnostics get diagnostics;
+
   /// Broadcast stream of later upload lifecycle events.
   Stream<RevclustUploadEvent> get uploadEvents;
 
-  /// Captures a Tier 1 incident through the default hosted-first facade path.
-  Future<RevclustCaptureOutcome> capture(RevclustTrigger trigger);
+  /// Captures one app-owned invariant failure as factual evidence.
+  Future<RevclustCaptureOutcome> captureInvariantFailure(
+    RevclustInvariantFailure failure,
+  );
 
-  /// Captures a Tier 1 incident through the manual or operator fallback path.
-  Future<RevclustCaptureOutcome> captureManual(RevclustTrigger trigger);
+  /// Records a reviewed app-owned UI breadcrumb for future captures.
+  ///
+  /// This is best-effort and does not throw for invalid breadcrumb input.
+  void recordUiIntent({
+    required String name,
+    Map<String, Object?> attributes = const <String, Object?>{},
+  });
+
+  /// Records a reviewed app-owned screen transition breadcrumb.
+  ///
+  /// This is best-effort and does not throw for invalid breadcrumb input.
+  void recordScreenTransition({
+    required String fromScreen,
+    required String toScreen,
+    Map<String, Object?> attributes = const <String, Object?>{},
+  });
 
   /// Installs the MVP Dio capture adapter for the host app.
   void enableDioCapture(Dio dio);
@@ -237,6 +258,9 @@ final class RevclustFacadeTestSupport {
   static RevclustFacadeDebugSnapshot snapshot(Revclust facade) =>
       _RevclustFacadeRuntime.instance.snapshot(facade);
 
+  static Future<void> refreshBootstrap(Revclust facade) =>
+      _RevclustFacadeRuntime.instance._requireFacade(facade).refreshBootstrap();
+
   static void reset() => _RevclustFacadeRuntime.instance.debugReset();
 }
 
@@ -299,6 +323,17 @@ final class _RevclustFacadeRuntime {
   }
 
   RevclustFacadeDebugSnapshot snapshot(Revclust facade) {
+    final _RevclustFacadeImpl facadeImpl = _requireFacade(facade);
+    return RevclustFacadeDebugSnapshot(
+      lifecycleState: facadeImpl.lifecycleState,
+      registeredDioCount: facadeImpl.registeredDioCount,
+      hasStateSnapshotProvider: facadeImpl.hasStateSnapshotProvider,
+      unhandledExceptionCaptureEnabled:
+          facadeImpl.unhandledExceptionCaptureEnabled,
+    );
+  }
+
+  _RevclustFacadeImpl _requireFacade(Revclust facade) {
     if (facade is! _RevclustFacadeImpl) {
       throw ArgumentError.value(
         facade,
@@ -306,12 +341,7 @@ final class _RevclustFacadeRuntime {
         "must come from Revclust.initialize(...)",
       );
     }
-    return RevclustFacadeDebugSnapshot(
-      lifecycleState: facade.lifecycleState,
-      registeredDioCount: facade.registeredDioCount,
-      hasStateSnapshotProvider: facade.hasStateSnapshotProvider,
-      unhandledExceptionCaptureEnabled: facade.unhandledExceptionCaptureEnabled,
-    );
+    return facade;
   }
 
   void debugReset() {
@@ -358,7 +388,7 @@ final class _RevclustFacadeRuntime {
       await facade.applyLifecycleState(
         RevclustFacadeBootstrapUnavailable(
           config: facade.config,
-          message: "Bootstrap assessment failed unexpectedly: $error",
+          message: "Bootstrap assessment failed unexpectedly.",
         ),
       );
       return _finishInitialization(facade, generation);
@@ -406,12 +436,17 @@ final class _RevclustFacadeRuntime {
     );
   }
 
-  bool _sameConfig(RevclustConfig left, RevclustConfig right) =>
-      left.projectKey == right.projectKey &&
-      left.environment == right.environment;
+  bool _sameConfig(RevclustConfig left, RevclustConfig right) => left == right;
 
   String _describeConfig(RevclustConfig config) =>
-      'projectKey "${config.projectKey}" in ${config.environment.name}';
+      'projectKey "${_maskProjectKey(config.projectKey)}"';
+
+  String _maskProjectKey(String value) {
+    if (value.length <= 12) {
+      return "rpk_...";
+    }
+    return "${value.substring(0, 8)}...${value.substring(value.length - 4)}";
+  }
 }
 
 final class _RevclustFacadeImpl
@@ -434,7 +469,10 @@ final class _RevclustFacadeImpl
         _uploadEventsController =
             StreamController<RevclustUploadEvent>.broadcast(sync: true),
         _lifecycleState = RevclustFacadeInitializing(config: config),
-        _uploadSnapshot = RevclustUploadSnapshot();
+        _uploadSnapshot = RevclustUploadSnapshot(),
+        _diagnostics = RevclustDiagnostics.notChecked(
+          bootstrapOrigin: resolveInternalRevclustBootstrapOrigin(config),
+        );
 
   final RevclustConfig config;
   final void Function(RevclustFacadeLifecycleState state) _onLifecycleChanged;
@@ -449,11 +487,13 @@ final class _RevclustFacadeImpl
   bool _unhandledExceptionCaptureEnabled = false;
   RevclustFacadeLifecycleState _lifecycleState;
   RevclustUploadSnapshot _uploadSnapshot;
+  RevclustDiagnostics _diagnostics;
   RevclustBootstrapLease? _bootstrapLease;
   RevclustUploadErrorCode? _lastUploadErrorCode;
   RevclustFacadeLocalCapture? _localCapture;
   RevclustOwnedUploadCoordinator? _uploadCoordinator;
   Future<void>? _localCaptureInitializationFuture;
+  Future<void> _breadcrumbRecordingFuture = Future<void>.value();
   bool _isDisposed = false;
 
   RevclustFacadeLifecycleState get lifecycleState => _lifecycleState;
@@ -469,16 +509,22 @@ final class _RevclustFacadeImpl
   RevclustUploadSnapshot get uploadSnapshot => _uploadSnapshot;
 
   @override
+  RevclustDiagnostics get diagnostics => _diagnostics;
+
+  @override
   Stream<RevclustUploadEvent> get uploadEvents =>
       _uploadEventsController.stream;
 
   @override
-  Future<RevclustCaptureOutcome> capture(RevclustTrigger trigger) async {
+  Future<RevclustCaptureOutcome> captureInvariantFailure(
+    RevclustInvariantFailure failure,
+  ) async {
     if (!_isCaptureAllowed) {
-      return _blockedCaptureOutcome(triggerType: "capture");
+      return _blockedCaptureOutcome(triggerType: "invariant failure capture");
     }
+    await _breadcrumbRecordingFuture;
     final RevclustCaptureOutcome outcome =
-        await (await _ensureLocalCapture()).capture(trigger, manual: false);
+        await (await _ensureLocalCapture()).captureInvariantFailure(failure);
     if (outcome is RevclustCaptureQueued) {
       await _refreshUploadSnapshotBestEffort();
       _uploadCoordinator?.requestDrain();
@@ -487,17 +533,36 @@ final class _RevclustFacadeImpl
   }
 
   @override
-  Future<RevclustCaptureOutcome> captureManual(RevclustTrigger trigger) async {
-    if (!_isCaptureAllowed) {
-      return _blockedCaptureOutcome(triggerType: "manual capture");
+  void recordUiIntent({
+    required String name,
+    Map<String, Object?> attributes = const <String, Object?>{},
+  }) {
+    if (_isDisposed) {
+      return;
     }
-    final RevclustCaptureOutcome outcome =
-        await (await _ensureLocalCapture()).capture(trigger, manual: true);
-    if (outcome is RevclustCaptureQueued) {
-      await _refreshUploadSnapshotBestEffort();
-      _uploadCoordinator?.requestDrain();
+    _enqueueBreadcrumb(
+      (RevclustFacadeLocalCapture localCapture) =>
+          localCapture.recordUiIntent(name: name, attributes: attributes),
+    );
+  }
+
+  @override
+  void recordScreenTransition({
+    required String fromScreen,
+    required String toScreen,
+    Map<String, Object?> attributes = const <String, Object?>{},
+  }) {
+    if (_isDisposed) {
+      return;
     }
-    return outcome;
+    _enqueueBreadcrumb(
+      (RevclustFacadeLocalCapture localCapture) =>
+          localCapture.recordScreenTransition(
+        fromScreen: fromScreen,
+        toScreen: toScreen,
+        attributes: attributes,
+      ),
+    );
   }
 
   @override
@@ -527,10 +592,20 @@ final class _RevclustFacadeImpl
     try {
       assessment = await _bootstrapProbe.assess(config);
     } catch (error) {
+      _diagnostics = RevclustDiagnostics(
+        bootstrap: RevclustBootstrapDiagnostics(
+          state: RevclustBootstrapDiagnosticState.unavailable,
+          bootstrapOrigin: resolveInternalRevclustBootstrapOrigin(config),
+          lastCheckedAt: _utcNow().toUtc(),
+          errorCategory: "bootstrap_unavailable",
+          retryable: true,
+          message: "Bootstrap assessment failed unexpectedly.",
+        ),
+      );
       await applyLifecycleState(
         RevclustFacadeBootstrapUnavailable(
           config: config,
-          message: "Bootstrap assessment failed unexpectedly: $error",
+          message: "Bootstrap assessment failed unexpectedly.",
         ),
       );
       return;
@@ -538,6 +613,10 @@ final class _RevclustFacadeImpl
 
     final RevclustBootstrapAssessment normalizedAssessment =
         _normalizeBootstrapAssessment(assessment);
+    _diagnostics = RevclustDiagnostics(
+      bootstrap: normalizedAssessment.diagnostics ??
+          _diagnosticsForAssessment(normalizedAssessment),
+    );
     switch (normalizedAssessment.disposition) {
       case RevclustBootstrapDisposition.ready:
         final RevclustBootstrapLease lease = normalizedAssessment.lease!;
@@ -574,8 +653,8 @@ final class _RevclustFacadeImpl
         await applyLifecycleState(
           RevclustFacadeMisconfigured(
             config: config,
-            message: normalizedAssessment.message ??
-                "Project key is misconfigured for the selected environment.",
+            message:
+                normalizedAssessment.message ?? "Project key is misconfigured.",
           ),
         );
         return;
@@ -585,7 +664,7 @@ final class _RevclustFacadeImpl
           RevclustFacadeNotProvisioned(
             config: config,
             message: normalizedAssessment.message ??
-                "Project key is not provisioned for the selected environment.",
+                "Project key is not provisioned.",
           ),
         );
         return;
@@ -639,6 +718,29 @@ final class _RevclustFacadeImpl
         RevclustFacadeNotProvisioned() =>
           false,
       };
+
+  void _enqueueBreadcrumb(
+    void Function(RevclustFacadeLocalCapture localCapture) record,
+  ) {
+    if (!_isCaptureAllowed) {
+      return;
+    }
+
+    _breadcrumbRecordingFuture = _breadcrumbRecordingFuture.then((_) async {
+      if (_isDisposed || !_isCaptureAllowed) {
+        return;
+      }
+      final RevclustFacadeLocalCapture localCapture =
+          await _ensureLocalCapture();
+      if (_isDisposed) {
+        return;
+      }
+      record(localCapture);
+    }).catchError((_) {
+      // Reviewed breadcrumbs are best-effort and must not destabilize UI code.
+    });
+    unawaited(_breadcrumbRecordingFuture);
+  }
 
   Future<RevclustFacadeLocalCapture> _ensureLocalCapture() async {
     final RevclustFacadeLocalCapture? existing = _localCapture;
@@ -768,6 +870,46 @@ final class _RevclustFacadeImpl
       );
     }
     return assessment;
+  }
+
+  RevclustBootstrapDiagnostics _diagnosticsForAssessment(
+    RevclustBootstrapAssessment assessment,
+  ) {
+    final RevclustBootstrapDiagnosticState state =
+        switch (assessment.disposition) {
+      RevclustBootstrapDisposition.ready =>
+        RevclustBootstrapDiagnosticState.ready,
+      RevclustBootstrapDisposition.bootstrapUnavailable =>
+        RevclustBootstrapDiagnosticState.unavailable,
+      RevclustBootstrapDisposition.misconfigured =>
+        RevclustBootstrapDiagnosticState.misconfigured,
+      RevclustBootstrapDisposition.notProvisioned =>
+        RevclustBootstrapDiagnosticState.notProvisioned,
+      RevclustBootstrapDisposition.uploadBlocked =>
+        RevclustBootstrapDiagnosticState.uploadBlocked,
+    };
+    return RevclustBootstrapDiagnostics(
+      state: state,
+      bootstrapOrigin: resolveInternalRevclustBootstrapOrigin(config),
+      lastCheckedAt: _utcNow().toUtc(),
+      errorCategory: switch (assessment.disposition) {
+        RevclustBootstrapDisposition.ready => null,
+        RevclustBootstrapDisposition.bootstrapUnavailable =>
+          "transport_unavailable",
+        RevclustBootstrapDisposition.misconfigured => "invalid_project_key",
+        RevclustBootstrapDisposition.notProvisioned =>
+          "project_not_provisioned",
+        RevclustBootstrapDisposition.uploadBlocked => "upload_auth_unavailable",
+      },
+      retryable: switch (assessment.disposition) {
+        RevclustBootstrapDisposition.ready => false,
+        RevclustBootstrapDisposition.bootstrapUnavailable => true,
+        RevclustBootstrapDisposition.misconfigured => false,
+        RevclustBootstrapDisposition.notProvisioned => false,
+        RevclustBootstrapDisposition.uploadBlocked => true,
+      },
+      message: assessment.message,
+    );
   }
 
   void _emitUploadEvent(RevclustUploadEvent event) {

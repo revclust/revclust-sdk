@@ -20,6 +20,7 @@
   "conditions": {
     "app_version": "3.1.0",
     "build": "31042",
+    "app_release_stage": "staging",
     "device_model": "Pixel 9 Pro",
     "os_version": "Android 16",
     "network_type": "wifi",
