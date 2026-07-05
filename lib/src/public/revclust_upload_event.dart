@@ -36,10 +36,10 @@ final class RevclustUploadRejected extends RevclustUploadEvent {
     String? message,
   }) : message = normalizeOptionalString(message, "message");
 
-  /// Lean hosted rejection taxonomy for pilot integrations.
+  /// Lean hosted rejection taxonomy for integrations.
   final RevclustRejectionCode code;
 
-  /// Optional operator-readable rejection message.
+  /// Optional human-readable rejection message.
   final String? message;
 }
 
@@ -56,7 +56,7 @@ final class RevclustTransportFailure extends RevclustUploadEvent {
   /// Optional HTTP status code observed on the failed transport attempt.
   final int? statusCode;
 
-  /// Optional operator-readable transport failure summary.
+  /// Optional human-readable transport failure summary.
   final String? message;
 
   /// Whether the failure appears retryable from the SDK point of view.
@@ -98,7 +98,7 @@ final class RevclustAcceptedResult {
   final Uri? viewerUrl;
 }
 
-/// Lean rejection taxonomy for MVP and pilot upload flows.
+/// Lean rejection taxonomy for hosted upload flows.
 enum RevclustRejectionCode {
   auth,
   misconfiguration,

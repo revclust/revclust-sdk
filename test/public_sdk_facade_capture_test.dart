@@ -7,6 +7,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
 import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
     as low_level;
+import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart"
+    as bootstrap_internal;
 import "package:revclust_flutter_sdk/src/public/revclust.dart"
     as facade_internal;
 import "package:revclust_flutter_sdk/src/public/revclust_local_capture.dart"
@@ -294,7 +296,7 @@ void main() {
       expect(dataState, isEmpty);
     });
 
-    test("captureInvariantFailure queues locally through the Slice 3 path",
+    test("captureInvariantFailure queues locally through the SDK path",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
         _readyAssessment(),
@@ -334,7 +336,7 @@ void main() {
           local_capture_internal.RevclustFacadeLocalStorageScope storageScope,
           String databasePath,
         ) {
-          return low_level.DesktopPilotFallbackKeyStore(
+          return low_level.DesktopFallbackKeyStore(
             secureStorageKeyStore: _ThrowingUnavailableKeyStore(),
             fallbackKeyStore: low_level.FileBackedKeyStore(
               filePath: "$databasePath.key",
@@ -570,20 +572,20 @@ facade.RevclustConfig _config({
 }
 
 Future<facade.Revclust> _initializeWithAssessment(
-    facade_internal.RevclustBootstrapAssessment assessment,
+    bootstrap_internal.RevclustBootstrapAssessment assessment,
     {facade.RevclustConfig? config}) {
   facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
       _FakeBootstrapProbe((_) async => assessment);
   return facade.Revclust.initialize(config ?? _config());
 }
 
-facade_internal.RevclustBootstrapAssessment _readyAssessment() {
-  return facade_internal.RevclustBootstrapAssessment.ready(
-    lease: facade_internal.RevclustBootstrapLease(
-      uploadEndpoint: Uri.parse("https://revclust.com/api/pilot/packs"),
-      authToken: "pilot_upload_auth_live",
+bootstrap_internal.RevclustBootstrapAssessment _readyAssessment() {
+  return bootstrap_internal.RevclustBootstrapAssessment.ready(
+    lease: bootstrap_internal.RevclustBootstrapLease(
+      uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
+      authToken: "incident_upload_auth_live",
       usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
-      viewerBaseUrl: Uri.parse("https://revclust.com/pilot/packs"),
+      viewerBaseUrl: Uri.parse("https://revclust.com/app/incidents"),
     ),
   );
 }
@@ -618,15 +620,15 @@ List<Object?> _asObjectList(Object? value) {
 }
 
 final class _FakeBootstrapProbe
-    implements facade_internal.RevclustBootstrapProbe {
+    implements bootstrap_internal.RevclustBootstrapProbe {
   _FakeBootstrapProbe(this._assess);
 
-  final Future<facade_internal.RevclustBootstrapAssessment> Function(
+  final Future<bootstrap_internal.RevclustBootstrapAssessment> Function(
     facade.RevclustConfig config,
   ) _assess;
 
   @override
-  Future<facade_internal.RevclustBootstrapAssessment> assess(
+  Future<bootstrap_internal.RevclustBootstrapAssessment> assess(
     facade.RevclustConfig config,
   ) {
     return _assess(config);
@@ -736,7 +738,7 @@ final class _HangingUploadTransport
   @override
   Future<upload_internal.RevclustOwnedUploadTransportResult> upload({
     required low_level.LocalPackRecord claimedPack,
-    required facade_internal.RevclustBootstrapLease lease,
+    required bootstrap_internal.RevclustBootstrapLease lease,
   }) {
     return _completer.future;
   }

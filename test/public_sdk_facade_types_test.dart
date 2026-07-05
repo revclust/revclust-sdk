@@ -9,6 +9,8 @@ import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart"
 import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
     as low_level;
 import "package:revclust_flutter_sdk/src/persistence/revclust_database_factory.dart";
+import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart"
+    as bootstrap_internal;
 import "package:revclust_flutter_sdk/src/public/revclust.dart"
     as facade_internal;
 import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
@@ -35,7 +37,7 @@ void main() {
     await localCaptureFactory.dispose();
   });
 
-  test("partner-facing entrypoint exposes the new facade types", () {
+  test("public entrypoint exposes SDK types", () {
     final facade.RevclustConfig config = facade.RevclustConfig(
       projectKey: _projectKey,
       releaseStage: facade.RevclustAppReleaseStage.staging,
@@ -106,7 +108,6 @@ void main() {
     expect(config.appVersion, "1.2.3");
     expect(config.build, "1203");
     expect(config.gitSha, "abcdef1");
-    expect(config.debugOptions.bootstrapOriginOverride, isNull);
     expect(
       facade.RevclustAppReleaseStage.custom("preview_1").value,
       "preview_1",
@@ -150,7 +151,7 @@ void main() {
     );
   });
 
-  test("compatibility entrypoint exposes the partner-facing facade", () {
+  test("compatibility entrypoint exposes the same SDK types", () {
     final compatibility.RevclustInvariantFailure failure =
         compatibility.RevclustInvariantFailure(
       failureKind: "checkout_confirmation_mismatch",
@@ -290,12 +291,10 @@ void main() {
     );
   });
 
-  test(
-      "partner-facing initialize returns a degraded app-scoped facade by default",
-      () async {
+  test("initialize returns a degraded app-scoped client by default", () async {
     facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
         _FakeBootstrapProbe(
-      (_) async => const facade_internal
+      (_) async => const bootstrap_internal
           .RevclustBootstrapAssessment.bootstrapUnavailable(
         message: "Bootstrap is unavailable.",
       ),
@@ -435,7 +434,7 @@ void main() {
     }
   });
 
-  test("partner-facing state snapshot provider stays sync-only", () {
+  test("state snapshot provider stays sync-only", () {
     facade.RevclustStateSnapshot syncProvider() {
       return const facade.RevclustStateSnapshot(
         appState: <String, Object?>{"screen": "checkout"},
@@ -468,11 +467,13 @@ void main() {
 
   test("acceptedAt stays aligned with SDK-observed acceptance time", () async {
     final DateTime observedAt = DateTime.parse("2026-03-28T15:30:00Z");
+    late RequestOptions uploadRequestOptions;
     final Dio dio = Dio()
       ..interceptors.add(
         InterceptorsWrapper(
           onRequest:
               (RequestOptions options, RequestInterceptorHandler handler) {
+            uploadRequestOptions = options;
             handler.resolve(
               Response<dynamic>(
                 requestOptions: options,
@@ -502,11 +503,11 @@ void main() {
         gzipBytes: Uint8List.fromList(<int>[1, 2, 3]),
         status: low_level.LocalPackRepository.statusUploading,
       ),
-      lease: facade_internal.RevclustBootstrapLease(
-        uploadEndpoint: Uri.parse("https://revclust.com/api/pilot/packs"),
-        authToken: "pilot_upload_auth_live",
+      lease: bootstrap_internal.RevclustBootstrapLease(
+        uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
+        authToken: "incident_upload_auth_live",
         usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
-        viewerBaseUrl: Uri.parse("https://revclust.com/pilot/packs"),
+        viewerBaseUrl: Uri.parse("https://revclust.com/app/incidents"),
       ),
     );
 
@@ -515,19 +516,23 @@ void main() {
       (result as upload_internal.RevclustOwnedUploadAccepted).result.acceptedAt,
       observedAt,
     );
+    expect(
+      uploadRequestOptions.headers["authorization"],
+      "Bearer incident_upload_auth_live",
+    );
   });
 }
 
 final class _FakeBootstrapProbe
-    implements facade_internal.RevclustBootstrapProbe {
+    implements bootstrap_internal.RevclustBootstrapProbe {
   _FakeBootstrapProbe(this._assess);
 
-  final Future<facade_internal.RevclustBootstrapAssessment> Function(
+  final Future<bootstrap_internal.RevclustBootstrapAssessment> Function(
     facade.RevclustConfig config,
   ) _assess;
 
   @override
-  Future<facade_internal.RevclustBootstrapAssessment> assess(
+  Future<bootstrap_internal.RevclustBootstrapAssessment> assess(
     facade.RevclustConfig config,
   ) {
     return _assess(config);

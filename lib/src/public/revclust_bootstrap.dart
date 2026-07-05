@@ -1,7 +1,7 @@
 import "package:dio/dio.dart";
 
+import "../internal/bootstrap_origin.dart";
 import "_validation.dart";
-import "revclust_bootstrap_origin.dart";
 import "revclust_config.dart";
 import "revclust_diagnostics.dart";
 
@@ -109,6 +109,9 @@ abstract interface class RevclustBootstrapProbe {
   Future<RevclustBootstrapAssessment> assess(RevclustConfig config);
 }
 
+RevclustBootstrapProbe createDefaultRevclustBootstrapProbe() =>
+    HttpRevclustBootstrapProbe();
+
 /// Default hosted bootstrap client used outside deterministic tests.
 final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
   HttpRevclustBootstrapProbe({
@@ -131,7 +134,7 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
 
   @override
   Future<RevclustBootstrapAssessment> assess(RevclustConfig config) async {
-    final Uri bootstrapOrigin = _bootstrapOrigin(config);
+    final Uri bootstrapOrigin = canonicalRevclustBootstrapOrigin;
     final Uri endpoint = _bootstrapEndpoint(bootstrapOrigin);
     final DateTime checkedAt = _utcNow();
     Response<dynamic> response;
@@ -394,12 +397,8 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
     }
   }
 
-  static Uri _bootstrapOrigin(RevclustConfig config) {
-    return resolveInternalRevclustBootstrapOrigin(config);
-  }
-
   static Uri _bootstrapEndpoint(Uri origin) {
-    return origin.resolve("/api/pilot/sdk/bootstrap");
+    return origin.resolve("/api/sdk/bootstrap");
   }
 
   static RevclustBootstrapDiagnostics _diagnostics({

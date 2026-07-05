@@ -1,20 +1,18 @@
 import "_validation.dart";
 
-/// Minimal hosted-first bootstrap configuration for the public Revclust facade.
+/// Revclust SDK configuration.
 final class RevclustConfig {
-  /// Creates the partner-facing bootstrap config.
+  /// Creates Revclust SDK configuration.
   RevclustConfig({
     required String projectKey,
     this.releaseStage,
     String? appVersion,
     String? build,
     String? gitSha,
-    RevclustDebugOptions? debugOptions,
   })  : projectKey = normalizeRequiredString(projectKey, "projectKey"),
         appVersion = normalizeOptionalString(appVersion, "appVersion"),
         build = normalizeOptionalString(build, "build"),
-        gitSha = _normalizeOptionalGitSha(gitSha, "gitSha"),
-        debugOptions = debugOptions ?? RevclustDebugOptions();
+        gitSha = _normalizeOptionalGitSha(gitSha, "gitSha");
 
   /// Publishable bootstrap key used for hosted bootstrap:
   /// `rpk_` plus a 32-character unpadded base64url body.
@@ -22,21 +20,18 @@ final class RevclustConfig {
 
   /// Optional app release stage metadata attached to captured packs.
   ///
-  /// This describes the partner app build that produced a capture. It does not
+  /// This describes the app build that produced a capture. It does not
   /// select Revclust infrastructure.
   final RevclustAppReleaseStage? releaseStage;
 
-  /// Optional partner app version attached to captured pack conditions.
+  /// Optional app version attached to captured pack conditions.
   final String? appVersion;
 
-  /// Optional partner app build identifier attached to captured pack conditions.
+  /// Optional app build identifier attached to captured pack conditions.
   final String? build;
 
   /// Optional source revision attached to captured pack conditions.
   final String? gitSha;
-
-  /// Advanced debug-only transport options.
-  final RevclustDebugOptions debugOptions;
 
   @override
   bool operator ==(Object other) {
@@ -45,13 +40,12 @@ final class RevclustConfig {
         other.releaseStage == releaseStage &&
         other.appVersion == appVersion &&
         other.build == build &&
-        other.gitSha == gitSha &&
-        other.debugOptions == debugOptions;
+        other.gitSha == gitSha;
   }
 
   @override
-  int get hashCode => Object.hash(
-      projectKey, releaseStage, appVersion, build, gitSha, debugOptions);
+  int get hashCode =>
+      Object.hash(projectKey, releaseStage, appVersion, build, gitSha);
 
   static final RegExp _gitShaPattern = RegExp(r"^[0-9a-f]{7,40}$");
 
@@ -69,7 +63,7 @@ final class RevclustConfig {
   }
 }
 
-/// Partner app release-stage metadata.
+/// App release-stage metadata.
 final class RevclustAppReleaseStage {
   const RevclustAppReleaseStage._(this.value);
 
@@ -105,56 +99,4 @@ final class RevclustAppReleaseStage {
 
   @override
   String toString() => value;
-}
-
-/// Advanced debug options for local or non-default Revclust bootstrap routing.
-final class RevclustDebugOptions {
-  RevclustDebugOptions({
-    Uri? bootstrapOriginOverride,
-  }) : bootstrapOriginOverride = bootstrapOriginOverride == null
-            ? null
-            : _normalizeBootstrapOriginOverride(bootstrapOriginOverride);
-
-  /// Optional absolute origin used instead of the canonical hosted origin.
-  ///
-  /// The SDK owns the bootstrap path and appends `/api/pilot/sdk/bootstrap`.
-  final Uri? bootstrapOriginOverride;
-
-  @override
-  bool operator ==(Object other) =>
-      other is RevclustDebugOptions &&
-      other.bootstrapOriginOverride == bootstrapOriginOverride;
-
-  @override
-  int get hashCode => bootstrapOriginOverride.hashCode;
-
-  static Uri _normalizeBootstrapOriginOverride(Uri value) {
-    if (!value.hasScheme ||
-        (value.scheme != "https" && value.scheme != "http")) {
-      throw ArgumentError(
-        "bootstrapOriginOverride must be an absolute http or https origin.",
-      );
-    }
-    if (value.host.trim().isEmpty) {
-      throw ArgumentError(
-        "bootstrapOriginOverride must include a host.",
-      );
-    }
-    if (value.userInfo.isNotEmpty) {
-      throw ArgumentError(
-        "bootstrapOriginOverride must not include credentials.",
-      );
-    }
-    if (value.hasQuery || value.hasFragment) {
-      throw ArgumentError(
-        "bootstrapOriginOverride must not include query or fragment.",
-      );
-    }
-    if (value.path.isNotEmpty && value.path != "/") {
-      throw ArgumentError(
-        "bootstrapOriginOverride must be origin-only.",
-      );
-    }
-    return value.replace(path: "");
-  }
 }

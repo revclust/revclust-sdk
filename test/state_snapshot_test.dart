@@ -94,7 +94,7 @@ void main() {
         );
 
         final String payloadJson = jsonEncode(result.payload);
-        expect(payloadJson.contains("secret-token"), isFalse);
+        expect(payloadJson.contains("sensitive-state-marker"), isFalse);
         expect(payloadJson.contains("ord_12345"), isFalse);
       },
     );
@@ -350,7 +350,7 @@ class _MutableState {
   String note = "ready";
   int cartCount = 2;
   String orderId = "ord_12345";
-  String secretToken = "secret-token";
+  String privateMarker = "sensitive-state-marker";
 }
 
 class _DelayedHashAlgorithm implements HashAlgorithm {

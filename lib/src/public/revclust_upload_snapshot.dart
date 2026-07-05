@@ -21,7 +21,7 @@ final class RevclustUploadSnapshot {
   final RevclustUploadErrorCode? lastErrorCode;
 }
 
-/// Lean queue or upload error taxonomy for MVP and pilot facade status.
+/// Lean queue or upload error taxonomy for hosted facade status.
 enum RevclustUploadErrorCode {
   transportUnavailable,
   auth,

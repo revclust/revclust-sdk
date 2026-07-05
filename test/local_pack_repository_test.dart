@@ -294,7 +294,7 @@ void main() {
 
       await expectLater(
         failingRepository.savePending(
-          _buildResult(captureId: "capture-1", text: "secret-gzip-bytes"),
+          _buildResult(captureId: "capture-1", text: "sensitive-gzip-bytes"),
         ),
         throwsA(isA<StateError>()),
       );
@@ -304,8 +304,10 @@ void main() {
       expect(logs.single.level, SdkLogLevel.error);
       expect(logs.single.metadata["capture_id"], "capture-1");
       expect(logs.single.metadata["stage"], "open_database");
-      expect(jsonEncode(logs.single.metadata).contains("secret-gzip-bytes"),
-          isFalse);
+      expect(
+        jsonEncode(logs.single.metadata).contains("sensitive-gzip-bytes"),
+        isFalse,
+      );
     });
 
     test(
@@ -316,7 +318,7 @@ void main() {
       final InMemoryKeyStore firstSessionSecureKeyStore = InMemoryKeyStore();
       final LocalPackRepository firstSessionRepository = LocalPackRepository(
         encryptionService: AesGcmEncryptionService(
-          keyStore: DesktopPilotFallbackKeyStore(
+          keyStore: DesktopFallbackKeyStore(
             secureStorageKeyStore: firstSessionSecureKeyStore,
             fallbackKeyStore: firstSessionFallbackKeyStore,
           ),
@@ -343,7 +345,7 @@ void main() {
 
       final LocalPackRepository secondSessionRepository = LocalPackRepository(
         encryptionService: AesGcmEncryptionService(
-          keyStore: DesktopPilotFallbackKeyStore(
+          keyStore: DesktopFallbackKeyStore(
             secureStorageKeyStore: _ThrowingUnavailableKeyStore(),
             fallbackKeyStore: FileBackedKeyStore(filePath: "$dbPath.key"),
           ),

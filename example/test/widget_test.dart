@@ -4,15 +4,15 @@ import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk_example/main.dart";
 
 void main() {
-  testWidgets("quickstart app explains missing build-time config", (
+  testWidgets("example app explains missing build-time config", (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const RevclustQuickstartApp());
+    await tester.pumpWidget(const RevclustExampleApp());
 
-    expect(find.text("Revclust Hosted Quickstart"), findsOneWidget);
+    expect(find.text("Revclust SDK Example"), findsOneWidget);
     expect(
       find.text(
-        "Provide REVCLUST_PROJECT_KEY via --dart-define to enable the quickstart flow.",
+        "Provide REVCLUST_PROJECT_KEY via --dart-define to enable the example flow.",
       ),
       findsOneWidget,
     );

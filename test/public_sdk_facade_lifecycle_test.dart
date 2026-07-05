@@ -5,6 +5,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
 import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
     as low_level;
+import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart"
+    as bootstrap_internal;
 import "package:revclust_flutter_sdk/src/public/revclust.dart"
     as facade_internal;
 import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
@@ -39,8 +41,9 @@ void main() {
     test(
         "starts disabled and stays visibly initializing until bootstrap resolves",
         () async {
-      final Completer<facade_internal.RevclustBootstrapAssessment> completer =
-          Completer<facade_internal.RevclustBootstrapAssessment>();
+      final Completer<bootstrap_internal.RevclustBootstrapAssessment>
+          completer =
+          Completer<bootstrap_internal.RevclustBootstrapAssessment>();
       facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
           _FakeBootstrapProbe((_) => completer.future);
 
@@ -75,8 +78,9 @@ void main() {
 
     test("same-config concurrent init resolves through one future and facade",
         () async {
-      final Completer<facade_internal.RevclustBootstrapAssessment> completer =
-          Completer<facade_internal.RevclustBootstrapAssessment>();
+      final Completer<bootstrap_internal.RevclustBootstrapAssessment>
+          completer =
+          Completer<bootstrap_internal.RevclustBootstrapAssessment>();
       facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
           _FakeBootstrapProbe((_) => completer.future);
 
@@ -192,8 +196,9 @@ void main() {
 
     test("conflicting init fails clearly during active initialization",
         () async {
-      final Completer<facade_internal.RevclustBootstrapAssessment> completer =
-          Completer<facade_internal.RevclustBootstrapAssessment>();
+      final Completer<bootstrap_internal.RevclustBootstrapAssessment>
+          completer =
+          Completer<bootstrap_internal.RevclustBootstrapAssessment>();
       facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
           _FakeBootstrapProbe((_) => completer.future);
 
@@ -256,7 +261,8 @@ void main() {
         "bootstrap unavailable stays degraded while local capture still queues",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
-        const facade_internal.RevclustBootstrapAssessment.bootstrapUnavailable(
+        const bootstrap_internal
+            .RevclustBootstrapAssessment.bootstrapUnavailable(
           message: "Bootstrap is unavailable.",
         ),
       );
@@ -285,7 +291,7 @@ void main() {
           _FakeBootstrapProbe((_) async {
         bootstrapCalls += 1;
         if (bootstrapCalls == 1) {
-          return facade_internal.RevclustBootstrapAssessment
+          return bootstrap_internal.RevclustBootstrapAssessment
               .bootstrapUnavailable(
             message: "Bootstrap is unavailable.",
             diagnostics: facade.RevclustBootstrapDiagnostics(
@@ -347,7 +353,7 @@ void main() {
     test("misconfigured bootstrap stays visible and blocks manual capture",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
-        const facade_internal.RevclustBootstrapAssessment.misconfigured(
+        const bootstrap_internal.RevclustBootstrapAssessment.misconfigured(
           message: "Project key is misconfigured.",
         ),
       );
@@ -369,7 +375,7 @@ void main() {
     test("not provisioned bootstrap stays visible and blocks capture",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
-        const facade_internal.RevclustBootstrapAssessment.notProvisioned(
+        const bootstrap_internal.RevclustBootstrapAssessment.notProvisioned(
           message: "Project key is not provisioned.",
         ),
       );
@@ -391,7 +397,7 @@ void main() {
     test("uploadBlocked stays visible while local queueing remains allowed",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
-        const facade_internal.RevclustBootstrapAssessment.uploadBlocked(
+        const bootstrap_internal.RevclustBootstrapAssessment.uploadBlocked(
           message: "Upload auth is currently unavailable.",
         ),
       );
@@ -439,8 +445,9 @@ void main() {
 
     test("ready bootstrap still reports initializing capture as blocked",
         () async {
-      final Completer<facade_internal.RevclustBootstrapAssessment> completer =
-          Completer<facade_internal.RevclustBootstrapAssessment>();
+      final Completer<bootstrap_internal.RevclustBootstrapAssessment>
+          completer =
+          Completer<bootstrap_internal.RevclustBootstrapAssessment>();
       facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
           _FakeBootstrapProbe((_) => completer.future);
 
@@ -513,37 +520,37 @@ facade.RevclustInvariantFailure _failure() {
 }
 
 Future<facade.Revclust> _initializeWithAssessment(
-  facade_internal.RevclustBootstrapAssessment assessment,
+  bootstrap_internal.RevclustBootstrapAssessment assessment,
 ) {
   facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
       _FakeBootstrapProbe((_) async => assessment);
   return facade.Revclust.initialize(_config());
 }
 
-facade_internal.RevclustBootstrapAssessment _readyAssessment({
+bootstrap_internal.RevclustBootstrapAssessment _readyAssessment({
   facade.RevclustBootstrapDiagnostics? diagnostics,
 }) {
-  return facade_internal.RevclustBootstrapAssessment.ready(
-    lease: facade_internal.RevclustBootstrapLease(
-      uploadEndpoint: Uri.parse("https://revclust.com/api/pilot/packs"),
-      authToken: "pilot_upload_auth_live",
+  return bootstrap_internal.RevclustBootstrapAssessment.ready(
+    lease: bootstrap_internal.RevclustBootstrapLease(
+      uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
+      authToken: "incident_upload_auth_live",
       usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
-      viewerBaseUrl: Uri.parse("https://revclust.com/pilot/packs"),
+      viewerBaseUrl: Uri.parse("https://revclust.com/app/incidents"),
     ),
     diagnostics: diagnostics,
   );
 }
 
 final class _FakeBootstrapProbe
-    implements facade_internal.RevclustBootstrapProbe {
+    implements bootstrap_internal.RevclustBootstrapProbe {
   _FakeBootstrapProbe(this._assess);
 
-  final Future<facade_internal.RevclustBootstrapAssessment> Function(
+  final Future<bootstrap_internal.RevclustBootstrapAssessment> Function(
     facade.RevclustConfig config,
   ) _assess;
 
   @override
-  Future<facade_internal.RevclustBootstrapAssessment> assess(
+  Future<bootstrap_internal.RevclustBootstrapAssessment> assess(
     facade.RevclustConfig config,
   ) {
     return _assess(config);
@@ -559,7 +566,7 @@ final class _HangingUploadTransport
   @override
   Future<upload_internal.RevclustOwnedUploadTransportResult> upload({
     required low_level.LocalPackRecord claimedPack,
-    required facade_internal.RevclustBootstrapLease lease,
+    required bootstrap_internal.RevclustBootstrapLease lease,
   }) {
     return _completer.future;
   }

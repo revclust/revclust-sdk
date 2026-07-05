@@ -65,7 +65,7 @@ class FlutterSecureStorageKeyStore implements KeyStore {
   }
 }
 
-/// KeyStore backed by an app-local file for pilot desktop fallback.
+/// KeyStore backed by an app-local file for desktop fallback.
 class FileBackedKeyStore implements KeyStore {
   FileBackedKeyStore({
     required String filePath,
@@ -121,9 +121,9 @@ class FileBackedKeyStore implements KeyStore {
   }
 }
 
-/// Fallback wrapper for pilot desktop runtimes without usable keyring access.
-class DesktopPilotFallbackKeyStore implements KeyStore {
-  DesktopPilotFallbackKeyStore({
+/// Fallback wrapper for desktop runtimes without usable keyring access.
+class DesktopFallbackKeyStore implements KeyStore {
+  DesktopFallbackKeyStore({
     required KeyStore secureStorageKeyStore,
     required KeyStore fallbackKeyStore,
   })  : _secureStorageKeyStore = secureStorageKeyStore,

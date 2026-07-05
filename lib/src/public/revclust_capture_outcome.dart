@@ -32,10 +32,10 @@ final class RevclustCaptureBlocked extends RevclustCaptureOutcome {
   })  : message = normalizeOptionalString(message, "message"),
         super();
 
-  /// Facade status that explains the visible block condition.
+  /// SDK status that explains the visible block condition.
   final RevclustStatus status;
 
-  /// Optional operator-readable explanation of the block condition.
+  /// Optional human-readable explanation of the block condition.
   final String? message;
 }
 
@@ -47,7 +47,7 @@ final class RevclustCaptureBuildFailed
     String? message,
   }) : message = normalizeOptionalString(message, "message");
 
-  /// Optional operator-readable explanation of the build failure.
+  /// Optional human-readable explanation of the build failure.
   final String? message;
 }
 
@@ -59,6 +59,6 @@ final class RevclustCapturePersistenceFailed
     String? message,
   }) : message = normalizeOptionalString(message, "message");
 
-  /// Optional operator-readable explanation of the persistence failure.
+  /// Optional human-readable explanation of the persistence failure.
   final String? message;
 }

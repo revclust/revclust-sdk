@@ -13,7 +13,7 @@ dependencies:
   revclust_flutter_sdk:
     git:
       url: https://github.com/revclust/revclust-sdk.git
-      ref: v0.2.0
+      ref: v0.3.0
 ```
 
 Use the released tag provided by Revclust.
@@ -25,9 +25,9 @@ Use the released tag provided by Revclust.
 
 ## Platform Scope
 
-This SDK is for Flutter apps. The current managed pilot supports Flutter mobile
-apps on `iOS` and `Android` only. Flutter web and desktop runtimes are not part
-of the current support boundary.
+This SDK is for Flutter apps. The current managed setup supports Flutter
+mobile apps on `iOS` and `Android` only. Flutter web and desktop runtimes are
+not part of the current support boundary.
 
 ## Supported Entrypoint
 
@@ -37,7 +37,7 @@ Use the supported SDK entrypoint:
 import "package:revclust_flutter_sdk/revclust_flutter.dart";
 ```
 
-This is the supported entrypoint for partner integrations.
+This is the supported entrypoint for app integrations.
 
 ## Setup Docs
 
@@ -52,7 +52,7 @@ After adding the dependency, follow the Revclust setup docs for:
 
 Revclust publishes supported releases as immutable git tags.
 
-Pin your app to a specific tag. Use a commit only if Revclust asks your team to test a one-off build. Do not install from a moving branch head.
+Pin your app to a specific tag. Use a commit only when Revclust explicitly provides one. Do not install from a moving branch head.
 
 ## License And Service Boundary
 
@@ -65,6 +65,6 @@ The SDK license covers the SDK source code only. Access to the hosted Revclust s
 For setup help, first-incident verification, and operational support, use the
 setup docs and support channel provided by Revclust.
 
-This public repository is a distribution surface. External issue
+This public repository publishes the SDK. External issue
 reports and pull requests are not the normal support path unless Revclust has
 explicitly invited them.

@@ -6,7 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 import "support/viewer_integration_pack_fixture.dart";
 
 void main() {
-  test("viewer integration fixture stays SDK-generated and pilot-relevant",
+  test("viewer integration fixture stays SDK-generated and incident-relevant",
       () async {
     final result = await buildViewerIntegrationFixturePack();
     final Map<String, Object?> fixturePayload = _readFixturePayload();

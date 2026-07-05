@@ -26,12 +26,13 @@ void main() {
   test("replaces percent-encoded URL components that could leak secrets", () {
     expect(
       sanitizeNetworkPath(
-          "/reset/abc%3Ftoken%3Dsecret%26email%3Duser@example.com"),
+        "/reset/abc%3Ftoken%3Dmarker%26email%3Dperson@example.invalid",
+      ),
       "/reset/{id}",
     );
     expect(
       sanitizeNetworkPath(
-        "/proxy/https%3A%2F%2Finternal.example.com%2Forders%2F123%3Fauth%3Dsecret",
+        "/proxy/https%3A%2F%2Finternal.example.invalid%2Forders%2F123%3Fauth%3Dmarker",
       ),
       "/proxy/{id}",
     );

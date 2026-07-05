@@ -8,7 +8,7 @@ import "revclust_bootstrap.dart";
 import "revclust_upload_event.dart";
 import "revclust_upload_snapshot.dart";
 
-/// Fixed retry and lease policy for the Slice 4 owned uploader.
+/// Fixed retry and lease policy for owned uploads.
 final class RevclustOwnedUploadRetryPolicy {
   const RevclustOwnedUploadRetryPolicy({
     this.maxAttempts = 3,
@@ -126,7 +126,7 @@ final class HttpRevclustOwnedUploadTransport
         options: Options(
           headers: <String, Object?>{
             Headers.acceptHeader: Headers.jsonContentType,
-            "x-revclust-pilot-upload-credential": lease.authToken,
+            "authorization": "Bearer ${lease.authToken}",
           },
           contentType: Headers.jsonContentType,
         ),
@@ -198,8 +198,8 @@ final class HttpRevclustOwnedUploadTransport
     required int? statusCode,
   }) {
     switch (code) {
-      case "missing_upload_credential":
-      case "upload_credential_invalid":
+      case "missing_upload_authorization":
+      case "upload_authorization_invalid":
         return RevclustOwnedUploadRejected(
           code: RevclustRejectionCode.auth,
           errorCode: RevclustUploadErrorCode.auth,

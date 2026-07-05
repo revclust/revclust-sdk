@@ -9,33 +9,33 @@ const String _build = String.fromEnvironment("REVCLUST_BUILD");
 const String _gitSha = String.fromEnvironment("REVCLUST_GIT_SHA");
 
 void main() {
-  runApp(const RevclustQuickstartApp());
+  runApp(const RevclustExampleApp());
 }
 
-class RevclustQuickstartApp extends StatelessWidget {
-  const RevclustQuickstartApp({super.key});
+class RevclustExampleApp extends StatelessWidget {
+  const RevclustExampleApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: "Revclust Hosted Quickstart",
+      title: "Revclust SDK Example",
       theme: ThemeData(
         colorSchemeSeed: Colors.teal,
         splashFactory: InkRipple.splashFactory,
       ),
-      home: const QuickstartHomeScreen(),
+      home: const ExampleHomeScreen(),
     );
   }
 }
 
-class QuickstartHomeScreen extends StatefulWidget {
-  const QuickstartHomeScreen({super.key});
+class ExampleHomeScreen extends StatefulWidget {
+  const ExampleHomeScreen({super.key});
 
   @override
-  State<QuickstartHomeScreen> createState() => _QuickstartHomeScreenState();
+  State<ExampleHomeScreen> createState() => _ExampleHomeScreenState();
 }
 
-class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
+class _ExampleHomeScreenState extends State<ExampleHomeScreen> {
   final List<String> _eventLog = <String>[];
 
   Revclust? _revclust;
@@ -84,7 +84,7 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
       revclust.setStateSnapshotProvider(
         () => RevclustStateSnapshot(
           appState: <String, Object?>{
-            "screen": "quickstart_home",
+            "screen": "example_home",
             "sdk_status": revclust.status.name,
           },
           dataState: const <String, Object?>{
@@ -118,7 +118,7 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
 
       setState(() {
         _activityMessage =
-            "SDK initialization failed. Check your Revclust configuration and onboarding setup.";
+            "SDK initialization failed. Check your Revclust configuration and setup.";
         _eventLog.insert(0, "SDK initialization failed.");
       });
     } finally {
@@ -137,7 +137,7 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
       RevclustStatus.degraded || RevclustStatus.uploadBlocked =>
         "SDK initialized with status ${status.name}. Local capture can queue, but upload is not ready.",
       RevclustStatus.misconfigured || RevclustStatus.notProvisioned =>
-        "SDK initialized with status ${status.name}. Check the project key and onboarding setup.",
+        "SDK initialized with status ${status.name}. Check the project key and setup.",
       RevclustStatus.disabled || RevclustStatus.initializing =>
         "SDK initialized with status ${status.name}.",
     };
@@ -274,7 +274,7 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
     final ThemeData theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Revclust Hosted Quickstart")),
+      appBar: AppBar(title: const Text("Revclust SDK Example")),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: <Widget>[
@@ -310,7 +310,7 @@ class _QuickstartHomeScreenState extends State<QuickstartHomeScreen> {
                 const SizedBox(height: 8),
                 Text(
                   _activityMessage ??
-                      "Initialize the SDK to begin the hosted quickstart flow.",
+                      "Initialize the SDK to begin the example flow.",
                 ),
               ],
             ),
@@ -394,7 +394,7 @@ class _Section extends StatelessWidget {
 }
 
 String get _missingConfigMessage =>
-    "Provide REVCLUST_PROJECT_KEY via --dart-define to enable the quickstart flow.";
+    "Provide REVCLUST_PROJECT_KEY via --dart-define to enable the example flow.";
 
 String? _optionalBuildValue(String value) {
   if (value.isEmpty) {

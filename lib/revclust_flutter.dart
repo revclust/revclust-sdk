@@ -1,6 +1,6 @@
-/// Partner-facing Revclust Flutter facade types.
+/// Revclust Flutter SDK public API.
 ///
-/// This entrypoint is the hosted-first, facts-first public surface.
+/// This entrypoint exposes the facts-first app integration surface.
 library;
 
 export "src/public/public.dart";

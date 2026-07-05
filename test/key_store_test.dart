@@ -5,12 +5,11 @@ import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 import "support/in_memory_key_store.dart";
 
 void main() {
-  group("DesktopPilotFallbackKeyStore", () {
+  group("DesktopFallbackKeyStore", () {
     test("keeps using secure storage when it is available", () async {
       final InMemoryKeyStore secureStorageKeyStore = InMemoryKeyStore();
       final InMemoryKeyStore fallbackKeyStore = InMemoryKeyStore();
-      final DesktopPilotFallbackKeyStore keyStore =
-          DesktopPilotFallbackKeyStore(
+      final DesktopFallbackKeyStore keyStore = DesktopFallbackKeyStore(
         secureStorageKeyStore: secureStorageKeyStore,
         fallbackKeyStore: fallbackKeyStore,
       );
@@ -34,8 +33,7 @@ void main() {
 
     test("falls back when secure storage is unavailable", () async {
       final InMemoryKeyStore fallbackKeyStore = InMemoryKeyStore();
-      final DesktopPilotFallbackKeyStore keyStore =
-          DesktopPilotFallbackKeyStore(
+      final DesktopFallbackKeyStore keyStore = DesktopFallbackKeyStore(
         secureStorageKeyStore: _ThrowingUnavailableKeyStore(),
         fallbackKeyStore: fallbackKeyStore,
       );
@@ -60,8 +58,7 @@ void main() {
       final Uint8List material = Uint8List.fromList(<int>[13, 14, 15, 16]);
       await secureStorageKeyStore.writeKeyMaterial(material);
 
-      final DesktopPilotFallbackKeyStore keyStore =
-          DesktopPilotFallbackKeyStore(
+      final DesktopFallbackKeyStore keyStore = DesktopFallbackKeyStore(
         secureStorageKeyStore: secureStorageKeyStore,
         fallbackKeyStore: fallbackKeyStore,
       );
@@ -82,16 +79,16 @@ void main() {
       final InMemoryKeyStore secureStorageKeyStore = InMemoryKeyStore();
       final InMemoryKeyStore fallbackKeyStore = InMemoryKeyStore();
       final Uint8List material = Uint8List.fromList(<int>[17, 18, 19, 20]);
-      final DesktopPilotFallbackKeyStore firstSessionKeyStore =
-          DesktopPilotFallbackKeyStore(
+      final DesktopFallbackKeyStore firstSessionKeyStore =
+          DesktopFallbackKeyStore(
         secureStorageKeyStore: secureStorageKeyStore,
         fallbackKeyStore: fallbackKeyStore,
       );
 
       await firstSessionKeyStore.writeKeyMaterial(material);
 
-      final DesktopPilotFallbackKeyStore secondSessionKeyStore =
-          DesktopPilotFallbackKeyStore(
+      final DesktopFallbackKeyStore secondSessionKeyStore =
+          DesktopFallbackKeyStore(
         secureStorageKeyStore: _ThrowingUnavailableKeyStore(),
         fallbackKeyStore: fallbackKeyStore,
       );
@@ -105,8 +102,7 @@ void main() {
     test("uses fallback material when secure storage is empty", () async {
       final InMemoryKeyStore secureStorageKeyStore = InMemoryKeyStore();
       final InMemoryKeyStore fallbackKeyStore = InMemoryKeyStore();
-      final DesktopPilotFallbackKeyStore keyStore =
-          DesktopPilotFallbackKeyStore(
+      final DesktopFallbackKeyStore keyStore = DesktopFallbackKeyStore(
         secureStorageKeyStore: secureStorageKeyStore,
         fallbackKeyStore: fallbackKeyStore,
       );

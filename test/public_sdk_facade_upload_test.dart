@@ -5,6 +5,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
 import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
     as low_level;
+import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart"
+    as bootstrap_internal;
 import "package:revclust_flutter_sdk/src/public/revclust.dart"
     as facade_internal;
 import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
@@ -45,21 +47,21 @@ void main() {
     test("queued captures drain through the owned upload path when ready",
         () async {
       final _ScriptedBootstrapProbe bootstrapProbe = _ScriptedBootstrapProbe(
-        <facade_internal.RevclustBootstrapAssessment>[
+        <bootstrap_internal.RevclustBootstrapAssessment>[
           _readyAssessment(),
         ],
       );
       final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
         (low_level.LocalPackRecord claimedPack,
-            facade_internal.RevclustBootstrapLease _) async {
+            bootstrap_internal.RevclustBootstrapLease _) async {
           return upload_internal.RevclustOwnedUploadAccepted(
             facade.RevclustAcceptedResult(
               packId: "ppk_accept_001",
               schemaVersion: "1.0.0",
               blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
               acceptedAt: DateTime.parse("2026-03-28T12:00:00Z"),
-              viewerUrl:
-                  Uri.parse("https://revclust.com/pilot/packs/ppk_accept_001"),
+              viewerUrl: Uri.parse(
+                  "https://revclust.com/app/incidents/ppk_accept_001"),
             ),
           );
         },
@@ -113,8 +115,8 @@ void main() {
     test("bootstrapUnavailable still permits local queueing but does not drain",
         () async {
       final _ScriptedBootstrapProbe bootstrapProbe = _ScriptedBootstrapProbe(
-        const <facade_internal.RevclustBootstrapAssessment>[
-          facade_internal.RevclustBootstrapAssessment.bootstrapUnavailable(
+        const <bootstrap_internal.RevclustBootstrapAssessment>[
+          bootstrap_internal.RevclustBootstrapAssessment.bootstrapUnavailable(
             message: "Bootstrap is unavailable.",
           ),
         ],
@@ -187,8 +189,8 @@ void main() {
 
       facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
           _ScriptedBootstrapProbe(
-        const <facade_internal.RevclustBootstrapAssessment>[
-          facade_internal.RevclustBootstrapAssessment.misconfigured(
+        const <bootstrap_internal.RevclustBootstrapAssessment>[
+          bootstrap_internal.RevclustBootstrapAssessment.misconfigured(
             message: "Project key is misconfigured.",
           ),
         ],
@@ -213,8 +215,8 @@ void main() {
       );
       facade_internal.RevclustFacadeTestSupport.bootstrapProbe =
           _ScriptedBootstrapProbe(
-        const <facade_internal.RevclustBootstrapAssessment>[
-          facade_internal.RevclustBootstrapAssessment.notProvisioned(
+        const <bootstrap_internal.RevclustBootstrapAssessment>[
+          bootstrap_internal.RevclustBootstrapAssessment.notProvisioned(
             message: "Project key is not provisioned.",
           ),
         ],
@@ -247,7 +249,7 @@ void main() {
       );
       _installUploadHarness(
         bootstrapProbe: _ScriptedBootstrapProbe(
-          <facade_internal.RevclustBootstrapAssessment>[
+          <bootstrap_internal.RevclustBootstrapAssessment>[
             _readyAssessment(),
           ],
         ),
@@ -289,7 +291,7 @@ void main() {
       int attempt = 0;
       final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
         (low_level.LocalPackRecord claimedPack,
-            facade_internal.RevclustBootstrapLease _) async {
+            bootstrap_internal.RevclustBootstrapLease _) async {
           attempt += 1;
           if (attempt == 1) {
             return const upload_internal.RevclustOwnedUploadTransportFailure(
@@ -311,7 +313,7 @@ void main() {
       );
       _installUploadHarness(
         bootstrapProbe: _ScriptedBootstrapProbe(
-          <facade_internal.RevclustBootstrapAssessment>[
+          <bootstrap_internal.RevclustBootstrapAssessment>[
             _readyAssessment(),
           ],
         ),
@@ -366,7 +368,7 @@ void main() {
       );
       _installUploadHarness(
         bootstrapProbe: _ScriptedBootstrapProbe(
-          <facade_internal.RevclustBootstrapAssessment>[
+          <bootstrap_internal.RevclustBootstrapAssessment>[
             _readyAssessment(),
           ],
         ),
@@ -403,9 +405,9 @@ void main() {
     test("auth expiry during drain becomes visible and leaves work queued",
         () async {
       final _ScriptedBootstrapProbe bootstrapProbe = _ScriptedBootstrapProbe(
-        <facade_internal.RevclustBootstrapAssessment>[
+        <bootstrap_internal.RevclustBootstrapAssessment>[
           _readyAssessment(token: "stale_auth"),
-          const facade_internal.RevclustBootstrapAssessment.uploadBlocked(
+          const bootstrap_internal.RevclustBootstrapAssessment.uploadBlocked(
             message: "Upload auth could not be refreshed.",
           ),
         ],
@@ -414,7 +416,7 @@ void main() {
         (_, __) async => const upload_internal.RevclustOwnedUploadRejected(
           code: facade.RevclustRejectionCode.auth,
           errorCode: facade.RevclustUploadErrorCode.auth,
-          message: "credential expired",
+          message: "upload auth expired",
           statusCode: 403,
         ),
       );
@@ -456,7 +458,7 @@ void main() {
       );
       _installUploadHarness(
         bootstrapProbe: _ScriptedBootstrapProbe(
-          <facade_internal.RevclustBootstrapAssessment>[
+          <bootstrap_internal.RevclustBootstrapAssessment>[
             _readyAssessment(),
           ],
         ),
@@ -487,7 +489,7 @@ void main() {
       );
       final _FakeUploadTransport resumedTransport = _FakeUploadTransport(
         (low_level.LocalPackRecord claimedPack,
-            facade_internal.RevclustBootstrapLease _) async {
+            bootstrap_internal.RevclustBootstrapLease _) async {
           return upload_internal.RevclustOwnedUploadAccepted(
             facade.RevclustAcceptedResult(
               packId: "ppk_resume_001",
@@ -500,7 +502,7 @@ void main() {
       );
       _installUploadHarness(
         bootstrapProbe: _ScriptedBootstrapProbe(
-          <facade_internal.RevclustBootstrapAssessment>[
+          <bootstrap_internal.RevclustBootstrapAssessment>[
             _readyAssessment(),
           ],
         ),
@@ -527,7 +529,7 @@ void main() {
       );
       _installUploadHarness(
         bootstrapProbe: _ScriptedBootstrapProbe(
-          <facade_internal.RevclustBootstrapAssessment>[
+          <bootstrap_internal.RevclustBootstrapAssessment>[
             _readyAssessment(),
           ],
         ),
@@ -564,7 +566,7 @@ void main() {
       );
       final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
         (low_level.LocalPackRecord claimedPack,
-            facade_internal.RevclustBootstrapLease _) async {
+            bootstrap_internal.RevclustBootstrapLease _) async {
           return upload_internal.RevclustOwnedUploadAccepted(
             facade.RevclustAcceptedResult(
               packId: "pack_${claimedPack.captureId}",
@@ -634,7 +636,7 @@ void main() {
 
       final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
         (low_level.LocalPackRecord claimedPack,
-            facade_internal.RevclustBootstrapLease _) async {
+            bootstrap_internal.RevclustBootstrapLease _) async {
           return upload_internal.RevclustOwnedUploadAccepted(
             facade.RevclustAcceptedResult(
               packId: "pack_${claimedPack.captureId}",
@@ -690,7 +692,7 @@ void main() {
       int rawAttempt = 0;
       final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
         (low_level.LocalPackRecord claimedPack,
-            facade_internal.RevclustBootstrapLease _) async {
+            bootstrap_internal.RevclustBootstrapLease _) async {
           rawAttempt += 1;
           if (rawAttempt == 1) {
             throw StateError("simulated raw transport failure");
@@ -707,7 +709,7 @@ void main() {
       );
       _installUploadHarness(
         bootstrapProbe: _ScriptedBootstrapProbe(
-          <facade_internal.RevclustBootstrapAssessment>[
+          <bootstrap_internal.RevclustBootstrapAssessment>[
             _readyAssessment(),
           ],
         ),
@@ -766,7 +768,7 @@ void main() {
       int attempt = 0;
       final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
         (low_level.LocalPackRecord claimedPack,
-            facade_internal.RevclustBootstrapLease _) async {
+            bootstrap_internal.RevclustBootstrapLease _) async {
           attempt += 1;
           if (attempt == 1) {
             return const upload_internal.RevclustOwnedUploadTransportFailure(
@@ -847,7 +849,7 @@ facade.RevclustInvariantFailure _failure() {
 }
 
 void _installUploadHarness({
-  required facade_internal.RevclustBootstrapProbe bootstrapProbe,
+  required bootstrap_internal.RevclustBootstrapProbe bootstrapProbe,
   required upload_internal.RevclustOwnedUploadTransport uploadTransport,
   upload_internal.RevclustOwnedUploadRetryPolicy retryPolicy =
       const upload_internal.RevclustOwnedUploadRetryPolicy(),
@@ -857,15 +859,15 @@ void _installUploadHarness({
   facade_internal.RevclustFacadeTestSupport.uploadRetryPolicy = retryPolicy;
 }
 
-facade_internal.RevclustBootstrapAssessment _readyAssessment({
-  String token = "pilot_upload_auth_live",
+bootstrap_internal.RevclustBootstrapAssessment _readyAssessment({
+  String token = "incident_upload_auth_live",
 }) {
-  return facade_internal.RevclustBootstrapAssessment.ready(
-    lease: facade_internal.RevclustBootstrapLease(
-      uploadEndpoint: Uri.parse("https://revclust.com/api/pilot/packs"),
+  return bootstrap_internal.RevclustBootstrapAssessment.ready(
+    lease: bootstrap_internal.RevclustBootstrapLease(
+      uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
       authToken: token,
       usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
-      viewerBaseUrl: Uri.parse("https://revclust.com/pilot/packs"),
+      viewerBaseUrl: Uri.parse("https://revclust.com/app/incidents"),
     ),
   );
 }
@@ -900,14 +902,14 @@ Future<void> _drainEventQueue() async {
 }
 
 final class _ScriptedBootstrapProbe
-    implements facade_internal.RevclustBootstrapProbe {
+    implements bootstrap_internal.RevclustBootstrapProbe {
   _ScriptedBootstrapProbe(this._assessments);
 
-  final List<facade_internal.RevclustBootstrapAssessment> _assessments;
+  final List<bootstrap_internal.RevclustBootstrapAssessment> _assessments;
   int assessCallCount = 0;
 
   @override
-  Future<facade_internal.RevclustBootstrapAssessment> assess(
+  Future<bootstrap_internal.RevclustBootstrapAssessment> assess(
     facade.RevclustConfig config,
   ) async {
     if (_assessments.isEmpty) {
@@ -927,7 +929,7 @@ final class _FakeUploadTransport
 
   final Future<upload_internal.RevclustOwnedUploadTransportResult> Function(
     low_level.LocalPackRecord claimedPack,
-    facade_internal.RevclustBootstrapLease lease,
+    bootstrap_internal.RevclustBootstrapLease lease,
   ) _upload;
 
   int callCount = 0;
@@ -937,7 +939,7 @@ final class _FakeUploadTransport
   @override
   Future<upload_internal.RevclustOwnedUploadTransportResult> upload({
     required low_level.LocalPackRecord claimedPack,
-    required facade_internal.RevclustBootstrapLease lease,
+    required bootstrap_internal.RevclustBootstrapLease lease,
   }) {
     callCount += 1;
     captureIds.add(claimedPack.captureId);

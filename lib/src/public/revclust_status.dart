@@ -1,4 +1,4 @@
-/// Coarse service-health state for the hosted-first public facade.
+/// Coarse Revclust service-health state.
 enum RevclustStatus {
   disabled,
   initializing,

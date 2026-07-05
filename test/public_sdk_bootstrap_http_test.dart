@@ -18,8 +18,8 @@ void main() {
     final _RecordingBootstrapAdapter adapter = _RecordingBootstrapAdapter(
       statusCode: 200,
       responseBody: _successBody(
-        endpoint: "https://revclust.com/api/pilot/packs",
-        viewerBaseUrl: "https://revclust.com/pilot/packs",
+        endpoint: "https://revclust.com/api/incident-packs",
+        viewerBaseUrl: "https://revclust.com/app/incidents",
       ),
     );
     final HttpRevclustBootstrapProbe probe = _probeWithAdapter(
@@ -40,7 +40,7 @@ void main() {
     expect(assessment.disposition, RevclustBootstrapDisposition.ready);
     expect(
       adapter.lastRequestUri,
-      "https://revclust.com/api/pilot/sdk/bootstrap",
+      "https://revclust.com/api/sdk/bootstrap",
     );
     expect(adapter.lastRequestMethod, "POST");
     expect(
@@ -56,78 +56,6 @@ void main() {
     expect(
       assessment.diagnostics?.state,
       RevclustBootstrapDiagnosticState.ready,
-    );
-  });
-
-  test("debug origin override changes only the bootstrap origin", () async {
-    final _RecordingBootstrapAdapter adapter = _RecordingBootstrapAdapter(
-      statusCode: 200,
-      responseBody: _successBody(
-        endpoint: "http://10.0.2.2:3000/api/pilot/packs",
-        viewerBaseUrl: "http://10.0.2.2:3000/pilot/packs",
-      ),
-    );
-    final HttpRevclustBootstrapProbe probe = _probeWithAdapter(
-      adapter,
-      utcNow: () => DateTime.parse("2026-03-28T12:00:00.000Z"),
-    );
-
-    final RevclustBootstrapAssessment assessment = await probe.assess(
-      RevclustConfig(
-        projectKey: _liveProjectKey,
-        releaseStage: RevclustAppReleaseStage.staging,
-        debugOptions: RevclustDebugOptions(
-          bootstrapOriginOverride: Uri.parse("http://10.0.2.2:3000/"),
-        ),
-      ),
-    );
-
-    expect(assessment.disposition, RevclustBootstrapDisposition.ready);
-    expect(
-      adapter.lastRequestUri,
-      "http://10.0.2.2:3000/api/pilot/sdk/bootstrap",
-    );
-    expect(
-      jsonDecode(adapter.lastRequestBody ?? "") as Map<String, Object?>,
-      <String, Object?>{
-        "project_key": _liveProjectKey,
-      },
-    );
-    expect(
-      assessment.diagnostics?.bootstrapOrigin,
-      Uri.parse("http://10.0.2.2:3000"),
-    );
-  });
-
-  test("invalid debug override URIs are rejected without leaking credentials",
-      () {
-    final Matcher argumentError = isA<ArgumentError>().having(
-      (ArgumentError error) => error.toString(),
-      "message",
-      allOf(
-        isNot(contains("user")),
-        isNot(contains("secret")),
-        isNot(contains("example.com")),
-      ),
-    );
-
-    expect(
-      () => RevclustDebugOptions(
-        bootstrapOriginOverride: Uri.parse("https://user:secret@example.com"),
-      ),
-      throwsA(argumentError),
-    );
-    expect(
-      () => RevclustDebugOptions(
-        bootstrapOriginOverride: Uri.parse("https://revclust.com/custom"),
-      ),
-      throwsA(isA<ArgumentError>()),
-    );
-    expect(
-      () => RevclustDebugOptions(
-        bootstrapOriginOverride: Uri.parse("https://revclust.com?x=1"),
-      ),
-      throwsA(isA<ArgumentError>()),
     );
   });
 
@@ -170,7 +98,8 @@ void main() {
         "ok": false,
         "error": <String, Object?>{
           "code": "upload_auth_unavailable",
-          "message": "Do not expose rpk_secret_value or upload_token_secret.",
+          "message":
+              "Do not expose sensitive_project_marker or sensitive_upload_marker.",
         },
       }),
     );
@@ -198,8 +127,14 @@ void main() {
       assessment.diagnostics?.message,
       "Upload authorization could not be obtained right now.",
     );
-    expect(assessment.diagnostics?.message, isNot(contains("rpk_secret")));
-    expect(assessment.diagnostics?.message, isNot(contains("upload_token")));
+    expect(
+      assessment.diagnostics?.message,
+      isNot(contains("sensitive_project")),
+    );
+    expect(
+      assessment.diagnostics?.message,
+      isNot(contains("sensitive_upload")),
+    );
   });
 
   test("400 invalid_project_key maps to misconfigured diagnostics", () async {
@@ -209,7 +144,7 @@ void main() {
         "ok": false,
         "error": <String, Object?>{
           "code": "invalid_project_key",
-          "message": "Do not expose rpk_secret_value.",
+          "message": "Do not expose sensitive_project_marker.",
         },
       }),
     );
@@ -234,7 +169,10 @@ void main() {
     expect(assessment.diagnostics?.errorCategory, "invalid_project_key");
     expect(assessment.diagnostics?.retryable, isFalse);
     expect(assessment.diagnostics?.message, "Project key is misconfigured.");
-    expect(assessment.diagnostics?.message, isNot(contains("rpk_secret")));
+    expect(
+      assessment.diagnostics?.message,
+      isNot(contains("sensitive_project")),
+    );
   });
 
   test("unknown bootstrap error bodies do not leak messages or categories",
@@ -244,8 +182,8 @@ void main() {
       responseBody: jsonEncode(<String, Object?>{
         "ok": false,
         "error": <String, Object?>{
-          "code": "rpk_secret_code",
-          "message": "raw request body included rpk_secret_value",
+          "code": "sensitive_project_code",
+          "message": "raw request body included sensitive_project_marker",
         },
       }),
     );
@@ -267,9 +205,14 @@ void main() {
       "Hosted bootstrap could not be completed successfully.",
     );
     expect(assessment.diagnostics?.errorCategory, "bootstrap_unavailable");
-    expect(assessment.diagnostics?.message, isNot(contains("rpk_secret")));
     expect(
-        assessment.diagnostics?.errorCategory, isNot(contains("rpk_secret")));
+      assessment.diagnostics?.message,
+      isNot(contains("sensitive_project")),
+    );
+    expect(
+      assessment.diagnostics?.errorCategory,
+      isNot(contains("sensitive_project")),
+    );
   });
 }
 
@@ -358,7 +301,7 @@ String _successBody({
     "ok": true,
     "upload": <String, Object?>{
       "endpoint": endpoint,
-      "auth_token": "pilot_upload_credential_team_a",
+      "auth_token": "incident_upload_auth_team_a",
       "usable_until": "2026-03-28T12:15:00.000Z",
     },
     "viewer_base_url": viewerBaseUrl,

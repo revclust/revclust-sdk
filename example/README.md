@@ -1,6 +1,6 @@
 # Revclust Flutter SDK Example
 
-This example mirrors the current managed mobile pilot onboarding path for
+This example mirrors the current mobile setup path for
 `revclust_flutter_sdk`.
 
 It shows the minimum integration shape:
@@ -10,7 +10,7 @@ It shows the minimum integration shape:
 - register a small reviewed state snapshot provider
 - capture one explicit sample invariant failure and watch upload events
 
-The default quickstart is for Flutter mobile on `iOS` and `Android` only. It
+The example is for Flutter mobile on `iOS` and `Android` only. It
 does not enable automatic `Dio` or unhandled-exception hooks.
 The sample payload uses privacy-safe reference values rather than raw customer
 or order IDs.
@@ -26,7 +26,7 @@ flutter run \
 ```
 
 Replace the `rpk_...` key with the value provisioned for your team during
-onboarding.
+setup.
 
 Optional build metadata can be supplied by your existing build or CI system:
 
@@ -49,4 +49,4 @@ flutter run \
    Revclust viewer.
 
 If the app starts without the required project key, it stays in an
-offline quickstart mode and explains what configuration is missing.
+offline example mode and explains what configuration is missing.

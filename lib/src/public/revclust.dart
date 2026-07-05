@@ -3,10 +3,10 @@ import "dart:collection";
 
 import "package:dio/dio.dart";
 
+import "../internal/bootstrap_origin.dart";
 import "../persistence/local_pack_repository.dart";
 import "../state/state_snapshot.dart";
 import "revclust_bootstrap.dart";
-import "revclust_bootstrap_origin.dart";
 import "revclust_capture_outcome.dart";
 import "revclust_config.dart";
 import "revclust_diagnostics.dart";
@@ -17,15 +17,13 @@ import "revclust_status.dart";
 import "revclust_upload_event.dart";
 import "revclust_upload_snapshot.dart";
 
-export "revclust_bootstrap.dart";
-
-/// Partner-facing app-scoped Revclust facade.
+/// App-scoped Revclust SDK runtime.
 abstract interface class Revclust {
   /// Starts public Revclust bootstrap and returns the app-scoped client.
   static Future<Revclust> initialize(RevclustConfig config) =>
       _RevclustFacadeRuntime.instance.initialize(config);
 
-  /// Current service-health state for the hosted-first facade.
+  /// Current Revclust service-health state.
   RevclustStatus get status;
 
   /// Current best-known upload queue or upload state.
@@ -59,7 +57,7 @@ abstract interface class Revclust {
     Map<String, Object?> attributes = const <String, Object?>{},
   });
 
-  /// Installs the MVP Dio capture adapter for the host app.
+  /// Installs the Dio capture adapter for the host app.
   void enableDioCapture(Dio dio);
 
   /// Registers a bounded app-state provider for future captures.
@@ -69,10 +67,10 @@ abstract interface class Revclust {
   void enableUnhandledExceptionCapture();
 }
 
-/// Synchronous state snapshot provider used by the public facade.
+/// Synchronous state snapshot provider used by Revclust captures.
 typedef RevclustStateSnapshotProvider = RevclustStateSnapshot Function();
 
-/// Small partner-facing state snapshot payload.
+/// Small app-owned state snapshot payload.
 ///
 /// This keeps state capture product-shaped instead of exposing internal
 /// envelope or pack model types in the default integration path.
@@ -269,7 +267,8 @@ final class _RevclustFacadeRuntime {
 
   static final _RevclustFacadeRuntime instance = _RevclustFacadeRuntime._();
 
-  RevclustBootstrapProbe _bootstrapProbe = HttpRevclustBootstrapProbe();
+  RevclustBootstrapProbe _bootstrapProbe =
+      createDefaultRevclustBootstrapProbe();
   RevclustOwnedUploadTransport _uploadTransport =
       HttpRevclustOwnedUploadTransport();
   RevclustOwnedUploadRetryPolicy _uploadRetryPolicy =
@@ -351,7 +350,7 @@ final class _RevclustFacadeRuntime {
     _lifecycleState = const RevclustFacadeDisabled();
     _facade?._dispose();
     _facade = null;
-    _bootstrapProbe = HttpRevclustBootstrapProbe();
+    _bootstrapProbe = createDefaultRevclustBootstrapProbe();
     _uploadTransport = HttpRevclustOwnedUploadTransport();
     _uploadRetryPolicy = const RevclustOwnedUploadRetryPolicy();
     _utcNow = () => DateTime.now().toUtc();
@@ -471,7 +470,7 @@ final class _RevclustFacadeImpl
         _lifecycleState = RevclustFacadeInitializing(config: config),
         _uploadSnapshot = RevclustUploadSnapshot(),
         _diagnostics = RevclustDiagnostics.notChecked(
-          bootstrapOrigin: resolveInternalRevclustBootstrapOrigin(config),
+          bootstrapOrigin: canonicalRevclustBootstrapOrigin,
         );
 
   final RevclustConfig config;
@@ -595,7 +594,7 @@ final class _RevclustFacadeImpl
       _diagnostics = RevclustDiagnostics(
         bootstrap: RevclustBootstrapDiagnostics(
           state: RevclustBootstrapDiagnosticState.unavailable,
-          bootstrapOrigin: resolveInternalRevclustBootstrapOrigin(config),
+          bootstrapOrigin: canonicalRevclustBootstrapOrigin,
           lastCheckedAt: _utcNow().toUtc(),
           errorCategory: "bootstrap_unavailable",
           retryable: true,
@@ -890,7 +889,7 @@ final class _RevclustFacadeImpl
     };
     return RevclustBootstrapDiagnostics(
       state: state,
-      bootstrapOrigin: resolveInternalRevclustBootstrapOrigin(config),
+      bootstrapOrigin: canonicalRevclustBootstrapOrigin,
       lastCheckedAt: _utcNow().toUtc(),
       errorCategory: switch (assessment.disposition) {
         RevclustBootstrapDisposition.ready => null,

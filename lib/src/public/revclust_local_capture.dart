@@ -172,9 +172,9 @@ KeyStore resolveRevclustFacadeKeyStore(
     return secureStorageKeyStore;
   }
 
-  // The pilot desktop path must keep queueing even when the OS keyring is
-  // unavailable; on-device encryption is not part of the pilot baseline.
-  return DesktopPilotFallbackKeyStore(
+  // Desktop fallback must keep queueing even when the OS keyring is
+  // unavailable; on-device encryption is not part of the mobile support baseline.
+  return DesktopFallbackKeyStore(
     secureStorageKeyStore: secureStorageKeyStore,
     fallbackKeyStore: FileBackedKeyStore(filePath: "$databasePath.key"),
   );

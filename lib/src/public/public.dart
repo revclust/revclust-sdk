@@ -1,9 +1,5 @@
 export "revclust.dart"
     hide
-        RevclustBootstrapAssessment,
-        RevclustBootstrapDisposition,
-        RevclustBootstrapLease,
-        RevclustBootstrapProbe,
         RevclustFacadeBootstrapUnavailable,
         RevclustFacadeDebugSnapshot,
         RevclustFacadeDisabled,
