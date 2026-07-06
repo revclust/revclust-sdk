@@ -950,6 +950,14 @@ final class _RevclustFacadeImpl
     return _drainAccessForLifecycleState(_lifecycleState);
   }
 
+  @override
+  void discardConsumedLease(RevclustBootstrapLease lease) {
+    final RevclustBootstrapLease? current = _bootstrapLease;
+    if (current != null && current.authToken == lease.authToken) {
+      _bootstrapLease = null;
+    }
+  }
+
   RevclustDrainAccess _drainAccessForLifecycleState(
     RevclustFacadeLifecycleState state,
   ) {

@@ -13,7 +13,7 @@ dependencies:
   revclust_flutter_sdk:
     git:
       url: https://github.com/revclust/revclust-sdk.git
-      ref: v0.4.0
+      ref: v0.4.1
 ```
 
 Use the released tag provided by Revclust.

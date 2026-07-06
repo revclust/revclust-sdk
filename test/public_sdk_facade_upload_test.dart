@@ -112,6 +112,339 @@ void main() {
       expect(revclust.uploadSnapshot.lastErrorCode, isNull);
     });
 
+    test("successful uploads discard the consumed single-use lease", () async {
+      facade_internal.RevclustFacadeTestSupport.reset();
+      await localCaptureFactory.dispose();
+      localCaptureFactory = TestPublicFacadeLocalCaptureFactory(
+        utcNowMs: () => clockMs,
+        seededPendingCaptures: <SeededPendingCapture>[
+          SeededPendingCapture(
+            result: buildSeededPackResult(captureId: "cap_lease_first"),
+          ),
+          SeededPendingCapture(
+            result: buildSeededPackResult(captureId: "cap_lease_second"),
+          ),
+        ],
+      );
+      facade_internal.RevclustFacadeTestSupport.localCaptureFactory =
+          localCaptureFactory;
+      facade_internal.RevclustFacadeTestSupport.utcNow = _utcNowFactory(
+        () => clockMs,
+      );
+
+      final _ScriptedBootstrapProbe bootstrapProbe = _ScriptedBootstrapProbe(
+        <bootstrap_internal.RevclustBootstrapAssessment>[
+          _readyAssessment(token: "incident_lease_one"),
+          _readyAssessment(token: "incident_lease_two"),
+        ],
+      );
+      final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
+        (low_level.LocalPackRecord claimedPack,
+            bootstrap_internal.RevclustBootstrapLease _) async {
+          return upload_internal.RevclustOwnedUploadAccepted(
+            facade.RevclustAcceptedResult(
+              packId: "pack_${claimedPack.captureId}",
+              schemaVersion: "1.0.0",
+              blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
+              acceptedAt: DateTime.parse("2026-03-28T12:05:00Z"),
+            ),
+          );
+        },
+      );
+      _installUploadHarness(
+        bootstrapProbe: bootstrapProbe,
+        uploadTransport: uploadTransport,
+      );
+
+      final facade.Revclust revclust = await facade.Revclust.initialize(
+        _config(),
+      );
+      final List<facade.RevclustUploadEvent> events =
+          <facade.RevclustUploadEvent>[];
+      revclust.uploadEvents.listen(events.add);
+
+      await _waitFor(() async {
+        return events.length == 4 &&
+            await localCaptureFactory.countPending() == 0 &&
+            await localCaptureFactory.countUploading() == 0;
+      });
+
+      expect(uploadTransport.authTokens, <String>[
+        "incident_lease_one",
+        "incident_lease_two",
+      ]);
+      expect(bootstrapProbe.assessCallCount, 2);
+      expect(events[0], isA<facade.RevclustUploadStarted>());
+      expect(events[1], isA<facade.RevclustUploadAccepted>());
+      expect(events[2], isA<facade.RevclustUploadStarted>());
+      expect(events[3], isA<facade.RevclustUploadAccepted>());
+      expect(events.whereType<facade.RevclustUploadRejected>(), isEmpty);
+      expect(events.whereType<facade.RevclustTransportFailure>(), isEmpty);
+      expect(revclust.uploadSnapshot.pendingCount, 0);
+      expect(revclust.uploadSnapshot.uploadingCount, 0);
+      expect(revclust.uploadSnapshot.lastErrorCode, isNull);
+    });
+
+    test("non-auth rejections discard the consumed single-use lease", () async {
+      facade_internal.RevclustFacadeTestSupport.reset();
+      await localCaptureFactory.dispose();
+      localCaptureFactory = TestPublicFacadeLocalCaptureFactory(
+        utcNowMs: () => clockMs,
+        seededPendingCaptures: <SeededPendingCapture>[
+          SeededPendingCapture(
+            result: buildSeededPackResult(captureId: "cap_quota_first"),
+          ),
+          SeededPendingCapture(
+            result: buildSeededPackResult(captureId: "cap_quota_second"),
+          ),
+        ],
+      );
+      facade_internal.RevclustFacadeTestSupport.localCaptureFactory =
+          localCaptureFactory;
+      facade_internal.RevclustFacadeTestSupport.utcNow = _utcNowFactory(
+        () => clockMs,
+      );
+
+      final _ScriptedBootstrapProbe bootstrapProbe = _ScriptedBootstrapProbe(
+        <bootstrap_internal.RevclustBootstrapAssessment>[
+          _readyAssessment(token: "incident_lease_one"),
+          _readyAssessment(token: "incident_lease_two"),
+        ],
+      );
+      int uploadAttempt = 0;
+      final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
+        (low_level.LocalPackRecord claimedPack,
+            bootstrap_internal.RevclustBootstrapLease _) async {
+          uploadAttempt += 1;
+          if (uploadAttempt == 1) {
+            return const upload_internal.RevclustOwnedUploadRejected(
+              code: facade.RevclustRejectionCode.quotaExceeded,
+              errorCode: facade.RevclustUploadErrorCode.quotaExceeded,
+              message: "Monthly captured incident quota reached.",
+              statusCode: 402,
+            );
+          }
+          return upload_internal.RevclustOwnedUploadAccepted(
+            facade.RevclustAcceptedResult(
+              packId: "pack_${claimedPack.captureId}",
+              schemaVersion: "1.0.0",
+              blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
+              acceptedAt: DateTime.parse("2026-03-28T12:10:00Z"),
+            ),
+          );
+        },
+      );
+      _installUploadHarness(
+        bootstrapProbe: bootstrapProbe,
+        uploadTransport: uploadTransport,
+      );
+
+      final facade.Revclust revclust = await facade.Revclust.initialize(
+        _config(),
+      );
+      final List<facade.RevclustUploadEvent> events =
+          <facade.RevclustUploadEvent>[];
+      revclust.uploadEvents.listen(events.add);
+
+      await _waitFor(() async {
+        return events.length == 4 &&
+            await localCaptureFactory.countPending() == 0 &&
+            await localCaptureFactory.countUploading() == 0;
+      });
+
+      expect(uploadTransport.authTokens, <String>[
+        "incident_lease_one",
+        "incident_lease_two",
+      ]);
+      expect(bootstrapProbe.assessCallCount, 2);
+      expect(events[0], isA<facade.RevclustUploadStarted>());
+      expect(events[1], isA<facade.RevclustUploadRejected>());
+      expect(
+        (events[1] as facade.RevclustUploadRejected).code,
+        facade.RevclustRejectionCode.quotaExceeded,
+      );
+      expect(events[2], isA<facade.RevclustUploadStarted>());
+      expect(events[3], isA<facade.RevclustUploadAccepted>());
+      expect(events.whereType<facade.RevclustTransportFailure>(), isEmpty);
+      expect(revclust.uploadSnapshot.pendingCount, 0);
+      expect(revclust.uploadSnapshot.uploadingCount, 0);
+      expect(revclust.uploadSnapshot.lastErrorCode, isNull);
+    });
+
+    test("auth retry success discards the refreshed single-use lease", () async {
+      facade_internal.RevclustFacadeTestSupport.reset();
+      await localCaptureFactory.dispose();
+      localCaptureFactory = TestPublicFacadeLocalCaptureFactory(
+        utcNowMs: () => clockMs,
+        seededPendingCaptures: <SeededPendingCapture>[
+          SeededPendingCapture(
+            result: buildSeededPackResult(captureId: "cap_auth_first"),
+          ),
+          SeededPendingCapture(
+            result: buildSeededPackResult(captureId: "cap_auth_second"),
+          ),
+        ],
+      );
+      facade_internal.RevclustFacadeTestSupport.localCaptureFactory =
+          localCaptureFactory;
+      facade_internal.RevclustFacadeTestSupport.utcNow = _utcNowFactory(
+        () => clockMs,
+      );
+
+      final _ScriptedBootstrapProbe bootstrapProbe = _ScriptedBootstrapProbe(
+        <bootstrap_internal.RevclustBootstrapAssessment>[
+          _readyAssessment(token: "incident_lease_one"),
+          _readyAssessment(token: "incident_lease_two"),
+          _readyAssessment(token: "incident_lease_three"),
+        ],
+      );
+      int uploadAttempt = 0;
+      final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
+        (low_level.LocalPackRecord claimedPack,
+            bootstrap_internal.RevclustBootstrapLease _) async {
+          uploadAttempt += 1;
+          if (uploadAttempt == 1) {
+            return const upload_internal.RevclustOwnedUploadRejected(
+              code: facade.RevclustRejectionCode.auth,
+              errorCode: facade.RevclustUploadErrorCode.auth,
+              message: "Upload authorization has already been used.",
+              statusCode: 403,
+            );
+          }
+          return upload_internal.RevclustOwnedUploadAccepted(
+            facade.RevclustAcceptedResult(
+              packId: "pack_${claimedPack.captureId}",
+              schemaVersion: "1.0.0",
+              blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
+              acceptedAt: DateTime.parse("2026-03-28T12:15:00Z"),
+            ),
+          );
+        },
+      );
+      _installUploadHarness(
+        bootstrapProbe: bootstrapProbe,
+        uploadTransport: uploadTransport,
+      );
+
+      final facade.Revclust revclust = await facade.Revclust.initialize(
+        _config(),
+      );
+      final List<facade.RevclustUploadEvent> events =
+          <facade.RevclustUploadEvent>[];
+      revclust.uploadEvents.listen(events.add);
+
+      await _waitFor(() async {
+        return events.length == 4 &&
+            await localCaptureFactory.countPending() == 0 &&
+            await localCaptureFactory.countUploading() == 0;
+      });
+
+      expect(uploadTransport.authTokens, <String>[
+        "incident_lease_one",
+        "incident_lease_two",
+        "incident_lease_three",
+      ]);
+      expect(bootstrapProbe.assessCallCount, 3);
+      expect(events[0], isA<facade.RevclustUploadStarted>());
+      expect(events[1], isA<facade.RevclustUploadAccepted>());
+      expect(events[2], isA<facade.RevclustUploadStarted>());
+      expect(events[3], isA<facade.RevclustUploadAccepted>());
+      expect(events.whereType<facade.RevclustUploadRejected>(), isEmpty);
+      expect(events.whereType<facade.RevclustTransportFailure>(), isEmpty);
+      expect(revclust.uploadSnapshot.pendingCount, 0);
+      expect(revclust.uploadSnapshot.uploadingCount, 0);
+      expect(revclust.uploadSnapshot.lastErrorCode, isNull);
+    });
+
+    test("terminal auth rejection discards the refreshed single-use lease",
+        () async {
+      facade_internal.RevclustFacadeTestSupport.reset();
+      await localCaptureFactory.dispose();
+      localCaptureFactory = TestPublicFacadeLocalCaptureFactory(
+        utcNowMs: () => clockMs,
+        seededPendingCaptures: <SeededPendingCapture>[
+          SeededPendingCapture(
+            result: buildSeededPackResult(captureId: "cap_auth_fail_first"),
+          ),
+          SeededPendingCapture(
+            result: buildSeededPackResult(captureId: "cap_auth_fail_second"),
+          ),
+        ],
+      );
+      facade_internal.RevclustFacadeTestSupport.localCaptureFactory =
+          localCaptureFactory;
+      facade_internal.RevclustFacadeTestSupport.utcNow = _utcNowFactory(
+        () => clockMs,
+      );
+
+      final _ScriptedBootstrapProbe bootstrapProbe = _ScriptedBootstrapProbe(
+        <bootstrap_internal.RevclustBootstrapAssessment>[
+          _readyAssessment(token: "incident_lease_one"),
+          _readyAssessment(token: "incident_lease_two"),
+          _readyAssessment(token: "incident_lease_three"),
+        ],
+      );
+      int uploadAttempt = 0;
+      final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
+        (low_level.LocalPackRecord claimedPack,
+            bootstrap_internal.RevclustBootstrapLease _) async {
+          uploadAttempt += 1;
+          if (uploadAttempt <= 2) {
+            return const upload_internal.RevclustOwnedUploadRejected(
+              code: facade.RevclustRejectionCode.auth,
+              errorCode: facade.RevclustUploadErrorCode.auth,
+              message: "Upload authorization is invalid.",
+              statusCode: 403,
+            );
+          }
+          return upload_internal.RevclustOwnedUploadAccepted(
+            facade.RevclustAcceptedResult(
+              packId: "pack_${claimedPack.captureId}",
+              schemaVersion: "1.0.0",
+              blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
+              acceptedAt: DateTime.parse("2026-03-28T12:20:00Z"),
+            ),
+          );
+        },
+      );
+      _installUploadHarness(
+        bootstrapProbe: bootstrapProbe,
+        uploadTransport: uploadTransport,
+      );
+
+      final facade.Revclust revclust = await facade.Revclust.initialize(
+        _config(),
+      );
+      final List<facade.RevclustUploadEvent> events =
+          <facade.RevclustUploadEvent>[];
+      revclust.uploadEvents.listen(events.add);
+
+      await _waitFor(() async {
+        return events.length == 4 &&
+            await localCaptureFactory.countPending() == 0 &&
+            await localCaptureFactory.countUploading() == 0;
+      });
+
+      expect(uploadTransport.authTokens, <String>[
+        "incident_lease_one",
+        "incident_lease_two",
+        "incident_lease_three",
+      ]);
+      expect(bootstrapProbe.assessCallCount, 3);
+      expect(events[0], isA<facade.RevclustUploadStarted>());
+      expect(events[1], isA<facade.RevclustUploadRejected>());
+      expect(
+        (events[1] as facade.RevclustUploadRejected).code,
+        facade.RevclustRejectionCode.auth,
+      );
+      expect(events[2], isA<facade.RevclustUploadStarted>());
+      expect(events[3], isA<facade.RevclustUploadAccepted>());
+      expect(events.whereType<facade.RevclustTransportFailure>(), isEmpty);
+      expect(revclust.uploadSnapshot.pendingCount, 0);
+      expect(revclust.uploadSnapshot.uploadingCount, 0);
+      expect(revclust.uploadSnapshot.lastErrorCode, isNull);
+    });
+
     test("bootstrapUnavailable still permits local queueing but does not drain",
         () async {
       final _ScriptedBootstrapProbe bootstrapProbe = _ScriptedBootstrapProbe(
@@ -971,6 +1304,9 @@ final class _FixedDrainBootstrapDelegate
   Future<upload_internal.RevclustDrainAccess> refreshAfterAuthFailure() async {
     return _access;
   }
+
+  @override
+  void discardConsumedLease(bootstrap_internal.RevclustBootstrapLease lease) {}
 }
 
 final class _RepositoryHarness<T extends low_level.LocalPackRepository> {

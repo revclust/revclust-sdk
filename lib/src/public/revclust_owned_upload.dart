@@ -349,6 +349,8 @@ abstract interface class RevclustDrainBootstrapDelegate {
   Future<RevclustDrainAccess> ensureReadyForDrain();
 
   Future<RevclustDrainAccess> refreshAfterAuthFailure();
+
+  void discardConsumedLease(RevclustBootstrapLease lease);
 }
 
 /// Single-flight drain coordinator used behind the public facade runtime.
@@ -427,6 +429,13 @@ final class RevclustOwnedUploadCoordinator {
       await _onQueueStateChanged();
 
       while (!_isDisposed) {
+        final LocalPackQueueState queueState =
+            await _repository.describeQueue();
+        if (queueState.pendingCount <= 0) {
+          await _scheduleReadyWake();
+          return;
+        }
+
         final RevclustDrainAccess access =
             await _bootstrapDelegate.ensureReadyForDrain();
         if (access is RevclustDrainAccessUnavailable) {
@@ -463,9 +472,10 @@ final class RevclustOwnedUploadCoordinator {
     RevclustBootstrapLease lease,
   ) async {
     int attemptsUsed = 1;
+    RevclustBootstrapLease activeLease = lease;
     RevclustOwnedUploadTransportResult result = await _transport.upload(
       claimedPack: claimed,
-      lease: lease,
+      lease: activeLease,
     );
 
     if (result is RevclustOwnedUploadRejected &&
@@ -474,9 +484,10 @@ final class RevclustOwnedUploadCoordinator {
           await _bootstrapDelegate.refreshAfterAuthFailure();
       if (refreshed is RevclustDrainAccessReady) {
         attemptsUsed += 1;
+        activeLease = refreshed.lease;
         result = await _transport.upload(
           claimedPack: claimed,
-          lease: refreshed.lease,
+          lease: activeLease,
         );
       } else {
         await _handleTransportFailure(
@@ -496,6 +507,7 @@ final class RevclustOwnedUploadCoordinator {
 
     switch (result) {
       case RevclustOwnedUploadAccepted():
+        _bootstrapDelegate.discardConsumedLease(activeLease);
         await _repository.markUploaded(
           claimed.captureId,
           attemptsUsed: attemptsUsed,
@@ -510,6 +522,7 @@ final class RevclustOwnedUploadCoordinator {
         );
         return;
       case RevclustOwnedUploadRejected():
+        _bootstrapDelegate.discardConsumedLease(activeLease);
         await _repository.markFailed(
           claimed.captureId,
           lastErrorCode: result.errorCode.name,
