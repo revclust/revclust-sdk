@@ -521,6 +521,153 @@ void main() {
       "Bearer incident_upload_auth_live",
     );
   });
+
+  test("expired and used upload leases are mapped to auth rejections",
+      () async {
+    for (final String code in <String>[
+      "upload_authorization_expired",
+      "upload_authorization_used",
+    ]) {
+      final Dio dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest:
+                (RequestOptions options, RequestInterceptorHandler handler) {
+              handler.resolve(
+                Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 403,
+                  data: <String, Object?>{
+                    "ok": false,
+                    "error": <String, Object?>{
+                      "code": code,
+                      "message": "Upload authorization is stale.",
+                    },
+                  },
+                ),
+              );
+            },
+          ),
+        );
+      final upload_internal.HttpRevclustOwnedUploadTransport transport =
+          upload_internal.HttpRevclustOwnedUploadTransport(dio: dio);
+
+      final upload_internal.RevclustOwnedUploadTransportResult result =
+          await transport.upload(
+        claimedPack: low_level.LocalPackRecord(
+          captureId: "cap_${code}_001",
+          createdAtUtcMs: 1000,
+          gzipBytes: Uint8List.fromList(<int>[1, 2, 3]),
+          status: low_level.LocalPackRepository.statusUploading,
+        ),
+        lease: bootstrap_internal.RevclustBootstrapLease(
+          uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
+          authToken: "incident_upload_auth_stale",
+          usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
+        ),
+      );
+
+      expect(result, isA<upload_internal.RevclustOwnedUploadRejected>());
+      final upload_internal.RevclustOwnedUploadRejected rejected =
+          result as upload_internal.RevclustOwnedUploadRejected;
+      expect(rejected.code, facade.RevclustRejectionCode.auth);
+      expect(rejected.errorCode, facade.RevclustUploadErrorCode.auth);
+    }
+  });
+
+  test("quota rejection is explicit and non-auth", () async {
+    final Dio dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest:
+              (RequestOptions options, RequestInterceptorHandler handler) {
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 402,
+                data: <String, Object?>{
+                  "ok": false,
+                  "error": <String, Object?>{
+                    "code": "quota_exceeded",
+                    "message": "Monthly captured incident quota reached.",
+                  },
+                },
+              ),
+            );
+          },
+        ),
+      );
+    final upload_internal.HttpRevclustOwnedUploadTransport transport =
+        upload_internal.HttpRevclustOwnedUploadTransport(dio: dio);
+
+    final upload_internal.RevclustOwnedUploadTransportResult result =
+        await transport.upload(
+      claimedPack: low_level.LocalPackRecord(
+        captureId: "cap_quota_001",
+        createdAtUtcMs: 1000,
+        gzipBytes: Uint8List.fromList(<int>[1, 2, 3]),
+        status: low_level.LocalPackRepository.statusUploading,
+      ),
+      lease: bootstrap_internal.RevclustBootstrapLease(
+        uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
+        authToken: "incident_upload_auth_quota",
+        usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
+      ),
+    );
+
+    expect(result, isA<upload_internal.RevclustOwnedUploadRejected>());
+    final upload_internal.RevclustOwnedUploadRejected rejected =
+        result as upload_internal.RevclustOwnedUploadRejected;
+    expect(rejected.code, facade.RevclustRejectionCode.quotaExceeded);
+    expect(rejected.errorCode, facade.RevclustUploadErrorCode.quotaExceeded);
+  });
+
+  test("invalid pack shape is mapped to invalid request", () async {
+    final Dio dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest:
+              (RequestOptions options, RequestInterceptorHandler handler) {
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 400,
+                data: <String, Object?>{
+                  "ok": false,
+                  "error": <String, Object?>{
+                    "code": "invalid_pack_shape",
+                    "message": "Pack shape is invalid.",
+                  },
+                },
+              ),
+            );
+          },
+        ),
+      );
+    final upload_internal.HttpRevclustOwnedUploadTransport transport =
+        upload_internal.HttpRevclustOwnedUploadTransport(dio: dio);
+
+    final upload_internal.RevclustOwnedUploadTransportResult result =
+        await transport.upload(
+      claimedPack: low_level.LocalPackRecord(
+        captureId: "cap_invalid_pack_shape_001",
+        createdAtUtcMs: 1000,
+        gzipBytes: Uint8List.fromList(<int>[1, 2, 3]),
+        status: low_level.LocalPackRepository.statusUploading,
+      ),
+      lease: bootstrap_internal.RevclustBootstrapLease(
+        uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
+        authToken: "incident_upload_auth_invalid_shape",
+        usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
+      ),
+    );
+
+    expect(result, isA<upload_internal.RevclustOwnedUploadRejected>());
+    final upload_internal.RevclustOwnedUploadRejected rejected =
+        result as upload_internal.RevclustOwnedUploadRejected;
+    expect(rejected.code, facade.RevclustRejectionCode.invalidRequest);
+    expect(rejected.errorCode, facade.RevclustUploadErrorCode.invalidRequest);
+  });
 }
 
 final class _FakeBootstrapProbe

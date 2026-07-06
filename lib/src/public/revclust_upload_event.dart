@@ -103,6 +103,7 @@ enum RevclustRejectionCode {
   auth,
   misconfiguration,
   invalidRequest,
+  quotaExceeded,
   unsupportedSchema,
   blobTooLarge,
   internalError,

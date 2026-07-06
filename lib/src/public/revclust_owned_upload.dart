@@ -200,9 +200,18 @@ final class HttpRevclustOwnedUploadTransport
     switch (code) {
       case "missing_upload_authorization":
       case "upload_authorization_invalid":
+      case "upload_authorization_expired":
+      case "upload_authorization_used":
         return RevclustOwnedUploadRejected(
           code: RevclustRejectionCode.auth,
           errorCode: RevclustUploadErrorCode.auth,
+          message: message,
+          statusCode: statusCode,
+        );
+      case "quota_exceeded":
+        return RevclustOwnedUploadRejected(
+          code: RevclustRejectionCode.quotaExceeded,
+          errorCode: RevclustUploadErrorCode.quotaExceeded,
           message: message,
           statusCode: statusCode,
         );
@@ -240,6 +249,7 @@ final class HttpRevclustOwnedUploadTransport
       case "missing_blob":
       case "invalid_blob":
       case "invalid_blob_b64":
+      case "invalid_pack_shape":
       case "metadata_mismatch":
       case "invalid_capture_id":
         return RevclustOwnedUploadRejected(

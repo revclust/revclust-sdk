@@ -27,6 +27,7 @@ enum RevclustUploadErrorCode {
   auth,
   misconfiguration,
   invalidRequest,
+  quotaExceeded,
   unsupportedSchema,
   blobTooLarge,
   internalError,
