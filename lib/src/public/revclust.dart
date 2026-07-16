@@ -40,7 +40,7 @@ abstract interface class Revclust {
     RevclustInvariantFailure failure,
   );
 
-  /// Records a reviewed app-owned UI breadcrumb for future captures.
+  /// Records an app-owned UI breadcrumb for future captures.
   ///
   /// This is best-effort and does not throw for invalid breadcrumb input.
   void recordUiIntent({
@@ -48,7 +48,7 @@ abstract interface class Revclust {
     Map<String, Object?> attributes = const <String, Object?>{},
   });
 
-  /// Records a reviewed app-owned screen transition breadcrumb.
+  /// Records an app-owned screen transition breadcrumb.
   ///
   /// This is best-effort and does not throw for invalid breadcrumb input.
   void recordScreenTransition({
@@ -121,7 +121,7 @@ final class RevclustFacadeInitializing extends RevclustFacadeLifecycleState {
   RevclustStatus get status => RevclustStatus.initializing;
 }
 
-/// Provisional bootstrap succeeded and the facade is healthy.
+/// Bootstrap succeeded and the facade is healthy.
 final class RevclustFacadeReady extends RevclustFacadeLifecycleState {
   const RevclustFacadeReady({
     required RevclustConfig config,
@@ -156,7 +156,7 @@ final class RevclustFacadeLocalCaptureUnavailable
   RevclustStatus get status => RevclustStatus.degraded;
 }
 
-/// Config is clearly invalid for this provisional bootstrap model.
+/// SDK configuration is invalid for bootstrap.
 final class RevclustFacadeMisconfigured extends RevclustFacadeLifecycleState {
   const RevclustFacadeMisconfigured({
     required RevclustConfig config,
@@ -167,7 +167,7 @@ final class RevclustFacadeMisconfigured extends RevclustFacadeLifecycleState {
   RevclustStatus get status => RevclustStatus.misconfigured;
 }
 
-/// Config looks structurally valid but is not provisioned.
+/// SDK key is structurally valid but unavailable.
 final class RevclustFacadeNotProvisioned extends RevclustFacadeLifecycleState {
   const RevclustFacadeNotProvisioned({
     required RevclustConfig config,
@@ -438,9 +438,9 @@ final class _RevclustFacadeRuntime {
   bool _sameConfig(RevclustConfig left, RevclustConfig right) => left == right;
 
   String _describeConfig(RevclustConfig config) =>
-      'projectKey "${_maskProjectKey(config.projectKey)}"';
+      'SDK key "${_maskSdkKey(config.projectKey)}"';
 
-  String _maskProjectKey(String value) {
+  String _maskSdkKey(String value) {
     if (value.length <= 12) {
       return "rpk_...";
     }
@@ -653,7 +653,7 @@ final class _RevclustFacadeImpl
           RevclustFacadeMisconfigured(
             config: config,
             message:
-                normalizedAssessment.message ?? "Project key is misconfigured.",
+                normalizedAssessment.message ?? "SDK key is misconfigured.",
           ),
         );
         return;
@@ -663,7 +663,7 @@ final class _RevclustFacadeImpl
           RevclustFacadeNotProvisioned(
             config: config,
             message: normalizedAssessment.message ??
-                "Project key is not provisioned.",
+                "SDK key is not available.",
           ),
         );
         return;
@@ -736,7 +736,7 @@ final class _RevclustFacadeImpl
       }
       record(localCapture);
     }).catchError((_) {
-      // Reviewed breadcrumbs are best-effort and must not destabilize UI code.
+      // Breadcrumbs are best-effort and must not destabilize UI code.
     });
     unawaited(_breadcrumbRecordingFuture);
   }

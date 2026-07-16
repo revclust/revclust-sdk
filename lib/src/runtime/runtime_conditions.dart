@@ -5,7 +5,7 @@ import "package:flutter/foundation.dart";
 typedef DeviceConditionsReader = Future<RuntimeConditionsSnapshot> Function();
 typedef ConnectivityResultsReader = Future<List<ConnectivityResult>> Function();
 
-/// Snapshot of best-effort runtime conditions used by FR2 pack fields.
+/// Snapshot of best-effort runtime conditions used by captured packs.
 class RuntimeConditionsSnapshot {
   const RuntimeConditionsSnapshot({
     this.deviceModel,

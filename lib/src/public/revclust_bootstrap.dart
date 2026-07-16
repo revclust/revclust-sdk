@@ -513,11 +513,11 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
       case "invalid_project_key":
       case "project_key_invalid":
       case "invalid_project":
-        return "Project key is misconfigured.";
+        return "SDK key is misconfigured.";
       case "not_provisioned":
       case "project_not_provisioned":
       case "project_unavailable":
-        return "Project key is not provisioned.";
+        return "SDK key is not available.";
       case "upload_blocked":
       case "upload_auth_unavailable":
       case "auth_expired":
@@ -525,13 +525,13 @@ final class HttpRevclustBootstrapProbe implements RevclustBootstrapProbe {
         return "Upload authorization could not be obtained right now.";
     }
     if (statusCode == 400) {
-      return "Hosted bootstrap rejected the project key request.";
+      return "Hosted bootstrap rejected the SDK key request.";
     }
     if (statusCode == 401 || statusCode == 403) {
       return "Hosted bootstrap rejected upload authorization.";
     }
     if (statusCode == 404) {
-      return "Project key is not provisioned.";
+      return "SDK key is not available.";
     }
     return "Hosted bootstrap could not be completed successfully.";
   }

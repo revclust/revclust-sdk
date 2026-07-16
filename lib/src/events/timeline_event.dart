@@ -1,6 +1,6 @@
 import "dart:convert";
 
-/// Minimal event model placeholder for timeline capture.
+/// Minimal event model for timeline capture.
 class TimelineEvent {
   /// Creates a timeline event with a canonical event type and monotonic time.
   TimelineEvent({

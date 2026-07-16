@@ -189,7 +189,7 @@ void main() {
         config: SdkConfig(
           appVersion: "2.4.0",
           build: "24001",
-          stateHashSalt: "project-salt",
+          stateHashSalt: "app-salt",
         ),
         monotonicClockMs: () => 5000,
         stateSnapshotProvider: AllowlistedStateSnapshotProvider(
@@ -236,7 +236,7 @@ void main() {
       );
       expect(
         _asObjectMap(stateSnapshot["data_state"])["order_id"],
-        await _hashedDomainId("project-salt", "ord_12345"),
+        await _hashedDomainId("app-salt", "ord_12345"),
       );
     });
 
@@ -294,7 +294,7 @@ void main() {
         config: SdkConfig(
           appVersion: "3.0.0",
           build: "30001",
-          stateHashSalt: "project-salt",
+          stateHashSalt: "app-salt",
         ),
         monotonicClockMs: () => 6000,
         stateSnapshotProvider: AllowlistedStateSnapshotProvider(
@@ -341,7 +341,7 @@ void main() {
       expect(dataState["cart_count"], 2);
       expect(
         dataState["order_id"],
-        await _hashedDomainId("project-salt", "ord_12345"),
+        await _hashedDomainId("app-salt", "ord_12345"),
       );
     });
   });

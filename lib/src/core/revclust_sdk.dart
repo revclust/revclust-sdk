@@ -22,7 +22,7 @@ import "../timeline/ring_buffer.dart";
 import "../update_context/update_context_snapshot.dart";
 import "../update_context/session_state_store.dart";
 
-/// Placeholder entrypoint for integrating Revclust into a Flutter app.
+/// Low-level SDK entrypoint for capture, checkpointing, and pack building.
 class RevclustSdk {
   static const String _invariantFailureTriggerType = "invariant_failure";
 

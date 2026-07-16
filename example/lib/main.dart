@@ -3,7 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:revclust_flutter_sdk/revclust_flutter.dart";
 
-const String _projectKey = String.fromEnvironment("REVCLUST_PROJECT_KEY");
+const String _sdkKey = String.fromEnvironment("REVCLUST_PROJECT_KEY");
 const String _appVersion = String.fromEnvironment("REVCLUST_APP_VERSION");
 const String _build = String.fromEnvironment("REVCLUST_BUILD");
 const String _gitSha = String.fromEnvironment("REVCLUST_GIT_SHA");
@@ -45,7 +45,7 @@ class _ExampleHomeScreenState extends State<ExampleHomeScreen> {
   String? _activityMessage;
   String? _viewerUrl;
 
-  bool get _hasBuildTimeConfig => _projectKey.isNotEmpty;
+  bool get _hasBuildTimeConfig => _sdkKey.isNotEmpty;
 
   bool get _canInitialize =>
       _hasBuildTimeConfig && !_initializing && _revclust == null;
@@ -74,7 +74,7 @@ class _ExampleHomeScreenState extends State<ExampleHomeScreen> {
     try {
       final Revclust revclust = await Revclust.initialize(
         RevclustConfig(
-          projectKey: _projectKey,
+          projectKey: _sdkKey,
           appVersion: _optionalBuildValue(_appVersion),
           build: _optionalBuildValue(_build),
           gitSha: _optionalBuildValue(_gitSha),
@@ -133,11 +133,11 @@ class _ExampleHomeScreenState extends State<ExampleHomeScreen> {
   String _initializedMessage(RevclustStatus status) {
     return switch (status) {
       RevclustStatus.ready =>
-        "SDK is ready. Queue the reviewed sample incident to verify explicit capture and upload.",
+        "SDK is ready. Queue the sample incident to verify explicit capture and upload.",
       RevclustStatus.degraded || RevclustStatus.uploadBlocked =>
         "SDK initialized with status ${status.name}. Local capture can queue, but upload is not ready.",
       RevclustStatus.misconfigured || RevclustStatus.notProvisioned =>
-        "SDK initialized with status ${status.name}. Check the project key and setup.",
+        "SDK initialized with status ${status.name}. Check the SDK key and setup.",
       RevclustStatus.disabled || RevclustStatus.initializing =>
         "SDK initialized with status ${status.name}.",
     };
@@ -209,7 +209,7 @@ class _ExampleHomeScreenState extends State<ExampleHomeScreen> {
 
       setState(() {
         _activityMessage =
-            "Sample incident failed unexpectedly. Retry the reviewed capture or check the host logs.";
+            "Sample incident failed unexpectedly. Retry the capture or check the host logs.";
         _eventLog.insert(0, "Sample incident failed unexpectedly.");
       });
     } finally {
@@ -279,7 +279,7 @@ class _ExampleHomeScreenState extends State<ExampleHomeScreen> {
         padding: const EdgeInsets.all(24),
         children: <Widget>[
           Text(
-            "Initialize the SDK, register the reviewed snapshot provider, then queue one sample incident to verify explicit capture on mobile.",
+            "Initialize the SDK, register the state snapshot provider, then queue one sample incident to verify explicit capture on mobile.",
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 16),
@@ -289,7 +289,7 @@ class _ExampleHomeScreenState extends State<ExampleHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  "Project key: ${_projectKey.isEmpty ? "missing" : _maskProjectKey(_projectKey)}",
+                  "SDK key: ${_sdkKey.isEmpty ? "missing" : _maskSdkKey(_sdkKey)}",
                 ),
                 if (!_hasBuildTimeConfig) ...<Widget>[
                   const SizedBox(height: 12),
@@ -403,7 +403,7 @@ String? _optionalBuildValue(String value) {
   return value;
 }
 
-String _maskProjectKey(String value) {
+String _maskSdkKey(String value) {
   if (value.length <= 12) {
     return value;
   }

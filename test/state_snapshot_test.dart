@@ -7,7 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
 
 void main() {
-  group("FR3 state snapshot", () {
+  group("state snapshot", () {
     test("outer snapshot future normalizes Exception to empty snapshot",
         () async {
       final CapturedStateSnapshot snapshotHandle = CapturedStateSnapshot.future(
@@ -39,7 +39,7 @@ void main() {
           config: SdkConfig(
             appVersion: "2.4.0",
             build: "24001",
-            stateHashSalt: "project-salt",
+            stateHashSalt: "app-salt",
           ),
           monotonicClockMs: () => 5000,
           stateSnapshotProvider: AllowlistedStateSnapshotProvider(
@@ -89,7 +89,7 @@ void main() {
           _asObjectMap(stateSnapshot["data_state"]),
           <String, Object?>{
             "cart_count": 2,
-            "order_id": await _expectedHash("project-salt", "ord_12345"),
+            "order_id": await _expectedHash("app-salt", "ord_12345"),
           },
         );
 
@@ -243,16 +243,16 @@ void main() {
         maxStateKeys: 10,
         maxStateBytes: 1024,
         maxStringLen: 32,
-        hashSalt: "project-salt",
+        hashSalt: "app-salt",
       );
       final StateSnapshot second = await provider.capture(
         maxStateKeys: 10,
         maxStateBytes: 1024,
         maxStringLen: 32,
-        hashSalt: "project-salt",
+        hashSalt: "app-salt",
       );
 
-      final String expected = await _expectedHash("project-salt", "42");
+      final String expected = await _expectedHash("app-salt", "42");
       expect(first.dataState["account_id"], expected);
       expect(second.dataState["account_id"], expected);
       expect(jsonEncode(first.dataState).contains("\"42\""), isFalse);
@@ -276,7 +276,7 @@ void main() {
         maxStateKeys: 10,
         maxStateBytes: 1024,
         maxStringLen: 32,
-        hashSalt: "project-salt",
+        hashSalt: "app-salt",
       );
 
       expect(snapshot.dataState, isEmpty);
@@ -311,7 +311,7 @@ void main() {
           maxStateKeys: 10,
           maxStateBytes: 1024,
           maxStringLen: 32,
-          hashSalt: "project-salt",
+          hashSalt: "app-salt",
         );
 
         state.orderId = "ord_99999";
@@ -320,7 +320,7 @@ void main() {
         final StateSnapshot snapshot = await snapshotFuture;
         expect(
           snapshot.dataState["order_id"],
-          await _expectedHash("project-salt", "ord_12345"),
+          await _expectedHash("app-salt", "ord_12345"),
         );
       },
     );

@@ -87,12 +87,12 @@ void main() {
       appVersion: "  1.2.3  ",
       build: "  2026.03.04  ",
       gitSha: "  ABCDEF1  ",
-      stateHashSalt: "  project-salt  ",
+      stateHashSalt: "  app-salt  ",
     );
     expect(config.appVersion, "1.2.3");
     expect(config.build, "2026.03.04");
     expect(config.gitSha, "abcdef1");
-    expect(config.stateHashSalt, "project-salt");
+    expect(config.stateHashSalt, "app-salt");
   });
 
   test("timeline event validates required fields", () {

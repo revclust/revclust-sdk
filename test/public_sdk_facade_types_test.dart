@@ -19,8 +19,8 @@ import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
 import "support/in_memory_key_store.dart";
 import "support/public_facade_local_capture_factory.dart";
 
-// Deliberately synthetic shape-valid test key; never provision this.
-const String _projectKey = "rpk_00000000000000000000000000000000";
+// Deliberately synthetic shape-valid test key; never use this outside tests.
+const String _sdkKey = "rpk_00000000000000000000000000000000";
 
 void main() {
   late TestPublicFacadeLocalCaptureFactory localCaptureFactory;
@@ -39,7 +39,7 @@ void main() {
 
   test("public entrypoint exposes SDK types", () {
     final facade.RevclustConfig config = facade.RevclustConfig(
-      projectKey: _projectKey,
+      projectKey: _sdkKey,
       releaseStage: facade.RevclustAppReleaseStage.staging,
       appVersion: " 1.2.3 ",
       build: " 1203 ",
@@ -60,7 +60,7 @@ void main() {
         facade.RevclustCaptureQueued(captureId: "cap_123");
     final facade.RevclustCaptureOutcome blocked = facade.RevclustCaptureBlocked(
       status: facade.RevclustStatus.misconfigured,
-      message: "Project key is not provisioned.",
+      message: "SDK key is not available.",
     );
     final facade.RevclustCaptureBuildFailed buildFailed =
         facade.RevclustCaptureBuildFailed(
@@ -103,7 +103,7 @@ void main() {
       lastErrorCode: facade.RevclustUploadErrorCode.transportUnavailable,
     );
 
-    expect(config.projectKey, _projectKey);
+    expect(config.projectKey, _sdkKey);
     expect(config.releaseStage, facade.RevclustAppReleaseStage.staging);
     expect(config.appVersion, "1.2.3");
     expect(config.build, "1203");
@@ -301,10 +301,10 @@ void main() {
     );
 
     final facade.Revclust first = await facade.Revclust.initialize(
-      facade.RevclustConfig(projectKey: _projectKey),
+      facade.RevclustConfig(projectKey: _sdkKey),
     );
     final facade.Revclust second = await facade.Revclust.initialize(
-      facade.RevclustConfig(projectKey: _projectKey),
+      facade.RevclustConfig(projectKey: _sdkKey),
     );
 
     expect(second, same(first));
@@ -326,9 +326,9 @@ void main() {
     expect(first.uploadEvents.isBroadcast, isTrue);
   });
 
-  test("local storage scope ids stay stable for project hashing", () {
+  test("local storage scope ids stay stable for SDK key hashing", () {
     final facade.RevclustConfig config =
-        facade.RevclustConfig(projectKey: _projectKey);
+        facade.RevclustConfig(projectKey: _sdkKey);
 
     expect(
       facade_internal.RevclustFacadeTestSupport.localStorageDatabaseFileName(
@@ -344,14 +344,14 @@ void main() {
 
   test("local storage scope ignores build metadata", () {
     final facade.RevclustConfig first = facade.RevclustConfig(
-      projectKey: _projectKey,
+      projectKey: _sdkKey,
       releaseStage: facade.RevclustAppReleaseStage.production,
       appVersion: "1.2.3",
       build: "1203",
       gitSha: "abcdef1",
     );
     final facade.RevclustConfig second = facade.RevclustConfig(
-      projectKey: _projectKey,
+      projectKey: _sdkKey,
       releaseStage: facade.RevclustAppReleaseStage.staging,
       appVersion: "1.2.4",
       build: "1204",
@@ -375,19 +375,19 @@ void main() {
 
   test("config rejects invalid build metadata", () {
     expect(
-      () => facade.RevclustConfig(projectKey: _projectKey, appVersion: "   "),
+      () => facade.RevclustConfig(projectKey: _sdkKey, appVersion: "   "),
       throwsA(isA<ArgumentError>()),
     );
     expect(
-      () => facade.RevclustConfig(projectKey: _projectKey, build: "   "),
+      () => facade.RevclustConfig(projectKey: _sdkKey, build: "   "),
       throwsA(isA<ArgumentError>()),
     );
     expect(
-      () => facade.RevclustConfig(projectKey: _projectKey, gitSha: "   "),
+      () => facade.RevclustConfig(projectKey: _sdkKey, gitSha: "   "),
       throwsA(isA<ArgumentError>()),
     );
     expect(
-      () => facade.RevclustConfig(projectKey: _projectKey, gitSha: "not-a-sha"),
+      () => facade.RevclustConfig(projectKey: _sdkKey, gitSha: "not-a-sha"),
       throwsA(isA<ArgumentError>()),
     );
   });
@@ -620,6 +620,128 @@ void main() {
         result as upload_internal.RevclustOwnedUploadRejected;
     expect(rejected.code, facade.RevclustRejectionCode.quotaExceeded);
     expect(rejected.errorCode, facade.RevclustUploadErrorCode.quotaExceeded);
+  });
+
+  test("billing sync is surfaced as a deferred upload with Retry-After",
+      () async {
+    const String message =
+        "Workspace billing is still syncing. Retry this incident pack upload shortly.";
+    final Dio dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest:
+              (RequestOptions options, RequestInterceptorHandler handler) {
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 503,
+                headers: Headers.fromMap(
+                  <String, List<String>>{
+                    "retry-after": <String>["17"],
+                  },
+                ),
+                data: <String, Object?>{
+                  "ok": false,
+                  "error": <String, Object?>{
+                    "code": "billing_sync_required",
+                    "message": message,
+                  },
+                },
+              ),
+            );
+          },
+        ),
+      );
+    final upload_internal.HttpRevclustOwnedUploadTransport transport =
+        upload_internal.HttpRevclustOwnedUploadTransport(dio: dio);
+
+    final upload_internal.RevclustOwnedUploadTransportResult result =
+        await transport.upload(
+      claimedPack: low_level.LocalPackRecord(
+        captureId: "cap_billing_sync_001",
+        createdAtUtcMs: 1000,
+        gzipBytes: Uint8List.fromList(<int>[1, 2, 3]),
+        status: low_level.LocalPackRepository.statusUploading,
+      ),
+      lease: bootstrap_internal.RevclustBootstrapLease(
+        uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
+        authToken: "incident_upload_auth_billing_sync",
+        usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
+      ),
+    );
+
+    expect(
+      result,
+      isA<upload_internal.RevclustOwnedUploadDeferred>(),
+    );
+    final upload_internal.RevclustOwnedUploadDeferred deferred =
+        result as upload_internal.RevclustOwnedUploadDeferred;
+    expect(
+      deferred.errorCode,
+      facade.RevclustUploadErrorCode.transportUnavailable,
+    );
+    expect(deferred.code, "billing_sync_required");
+    expect(deferred.retryAfter, const Duration(seconds: 17));
+    expect(deferred.statusCode, 503);
+    expect(deferred.message, message);
+  });
+
+  test("app remediation defaults missing or invalid Retry-After to 60 seconds",
+      () async {
+    for (final String? retryAfter in <String?>[null, "0", "later"]) {
+      final Dio dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest:
+                (RequestOptions options, RequestInterceptorHandler handler) {
+              handler.resolve(
+                Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 409,
+                  headers: retryAfter == null
+                      ? Headers()
+                      : Headers.fromMap(
+                          <String, List<String>>{
+                            "retry-after": <String>[retryAfter],
+                          },
+                        ),
+                  data: <String, Object?>{
+                    "ok": false,
+                    "error": <String, Object?>{
+                      "code": "app_limit_remediation_required",
+                      "message": "Archive apps before capturing again.",
+                    },
+                  },
+                ),
+              );
+            },
+          ),
+        );
+      final upload_internal.HttpRevclustOwnedUploadTransport transport =
+          upload_internal.HttpRevclustOwnedUploadTransport(dio: dio);
+
+      final upload_internal.RevclustOwnedUploadTransportResult result =
+          await transport.upload(
+        claimedPack: low_level.LocalPackRecord(
+          captureId: "cap_app_remediation_${retryAfter ?? 'missing'}",
+          createdAtUtcMs: 1000,
+          gzipBytes: Uint8List.fromList(<int>[1, 2, 3]),
+          status: low_level.LocalPackRepository.statusUploading,
+        ),
+        lease: bootstrap_internal.RevclustBootstrapLease(
+          uploadEndpoint: Uri.parse("https://revclust.com/api/incident-packs"),
+          authToken: "incident_upload_auth_app_remediation",
+          usableUntil: DateTime.parse("2030-01-01T00:00:00Z"),
+        ),
+      );
+
+      expect(result, isA<upload_internal.RevclustOwnedUploadDeferred>());
+      final upload_internal.RevclustOwnedUploadDeferred deferred =
+          result as upload_internal.RevclustOwnedUploadDeferred;
+      expect(deferred.code, "app_limit_remediation_required");
+      expect(deferred.retryAfter, const Duration(seconds: 60));
+      expect(deferred.statusCode, 409);
+    }
   });
 
   test("invalid pack shape is mapped to invalid request", () async {

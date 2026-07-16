@@ -230,10 +230,10 @@ final class DefaultRevclustFacadeLocalCapture
       _sdk.recordUiIntent(
         tMonoMs: _sdk.monotonicClockMs(),
         name: normalizedName,
-        attributes: _copyReviewedBreadcrumbAttributes(attributes),
+        attributes: _copyBreadcrumbAttributes(attributes),
       );
     } on Object {
-      // Reviewed breadcrumbs are best-effort and must not throw into app UI.
+      // Breadcrumbs are best-effort and must not throw into app UI.
     }
   }
 
@@ -256,10 +256,10 @@ final class DefaultRevclustFacadeLocalCapture
         tMonoMs: _sdk.monotonicClockMs(),
         fromScreen: normalizedFromScreen,
         toScreen: normalizedToScreen,
-        attributes: _copyReviewedBreadcrumbAttributes(attributes),
+        attributes: _copyBreadcrumbAttributes(attributes),
       );
     } on Object {
-      // Reviewed breadcrumbs are best-effort and must not throw into app UI.
+      // Breadcrumbs are best-effort and must not throw into app UI.
     }
   }
 
@@ -340,19 +340,19 @@ String _projectStorageScopeId(String projectKey) {
   return hash.toRadixString(16).padLeft(16, "0");
 }
 
-const int _maxReviewedBreadcrumbAttributes = 16;
-const int _maxReviewedBreadcrumbAttributeBytes = 4096;
-const int _maxReviewedBreadcrumbStringLen = 256;
-const int _maxReviewedBreadcrumbDepth = 4;
+const int _maxBreadcrumbAttributes = 16;
+const int _maxBreadcrumbAttributeBytes = 4096;
+const int _maxBreadcrumbStringLen = 256;
+const int _maxBreadcrumbDepth = 4;
 
-final Object _unsupportedReviewedBreadcrumbValue = Object();
+final Object _unsupportedBreadcrumbValue = Object();
 
-Map<String, Object?> _copyReviewedBreadcrumbAttributes(
+Map<String, Object?> _copyBreadcrumbAttributes(
   Map<String, Object?> source,
 ) {
   final Map<String, Object?> copied = <String, Object?>{};
   for (final MapEntry<String, Object?> entry in source.entries) {
-    if (copied.length >= _maxReviewedBreadcrumbAttributes) {
+    if (copied.length >= _maxBreadcrumbAttributes) {
       break;
     }
 
@@ -361,11 +361,11 @@ Map<String, Object?> _copyReviewedBreadcrumbAttributes(
       continue;
     }
 
-    final Object? value = _copyReviewedBreadcrumbValue(
+    final Object? value = _copyBreadcrumbValue(
       entry.value,
       depth: 0,
     );
-    if (identical(value, _unsupportedReviewedBreadcrumbValue)) {
+    if (identical(value, _unsupportedBreadcrumbValue)) {
       continue;
     }
 
@@ -373,7 +373,7 @@ Map<String, Object?> _copyReviewedBreadcrumbAttributes(
       ...copied,
       key: value,
     };
-    if (_jsonByteLength(candidate) > _maxReviewedBreadcrumbAttributeBytes) {
+    if (_jsonByteLength(candidate) > _maxBreadcrumbAttributeBytes) {
       continue;
     }
     copied[key] = value;
@@ -381,36 +381,36 @@ Map<String, Object?> _copyReviewedBreadcrumbAttributes(
   return Map<String, Object?>.unmodifiable(copied);
 }
 
-Object? _copyReviewedBreadcrumbValue(Object? value, {required int depth}) {
+Object? _copyBreadcrumbValue(Object? value, {required int depth}) {
   if (value == null) {
     return null;
   }
   if (value is String) {
-    return _truncateString(value, _maxReviewedBreadcrumbStringLen);
+    return _truncateString(value, _maxBreadcrumbStringLen);
   }
   if (value is num) {
-    return value.isFinite ? value : _unsupportedReviewedBreadcrumbValue;
+    return value.isFinite ? value : _unsupportedBreadcrumbValue;
   }
   if (value is bool) {
     return value;
   }
-  if (depth >= _maxReviewedBreadcrumbDepth) {
-    return _unsupportedReviewedBreadcrumbValue;
+  if (depth >= _maxBreadcrumbDepth) {
+    return _unsupportedBreadcrumbValue;
   }
   if (value is Iterable) {
     final List<Object?> copied = <Object?>[];
     try {
       for (final Object? item in value) {
-        final Object? copiedItem = _copyReviewedBreadcrumbValue(
+        final Object? copiedItem = _copyBreadcrumbValue(
           item,
           depth: depth + 1,
         );
-        if (!identical(copiedItem, _unsupportedReviewedBreadcrumbValue)) {
+        if (!identical(copiedItem, _unsupportedBreadcrumbValue)) {
           copied.add(copiedItem);
         }
       }
     } on Object {
-      return _unsupportedReviewedBreadcrumbValue;
+      return _unsupportedBreadcrumbValue;
     }
     return List<Object?>.unmodifiable(copied);
   }
@@ -426,27 +426,27 @@ Object? _copyReviewedBreadcrumbValue(Object? value, {required int depth}) {
         if (key.isEmpty || copied.containsKey(key)) {
           continue;
         }
-        final Object? copiedValue = _copyReviewedBreadcrumbValue(
+        final Object? copiedValue = _copyBreadcrumbValue(
           entry.value,
           depth: depth + 1,
         );
-        if (!identical(copiedValue, _unsupportedReviewedBreadcrumbValue)) {
+        if (!identical(copiedValue, _unsupportedBreadcrumbValue)) {
           copied[key] = copiedValue;
         }
       }
     } on Object {
-      return _unsupportedReviewedBreadcrumbValue;
+      return _unsupportedBreadcrumbValue;
     }
     return Map<String, Object?>.unmodifiable(copied);
   }
-  return _unsupportedReviewedBreadcrumbValue;
+  return _unsupportedBreadcrumbValue;
 }
 
 String? _normalizeBreadcrumbRequiredString(String value) {
   final String normalized = value.trim();
   return normalized.isEmpty
       ? null
-      : _truncateString(normalized, _maxReviewedBreadcrumbStringLen);
+      : _truncateString(normalized, _maxBreadcrumbStringLen);
 }
 
 int _jsonByteLength(Object? value) => utf8.encode(jsonEncode(value)).length;

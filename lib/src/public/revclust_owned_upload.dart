@@ -79,6 +79,25 @@ final class RevclustOwnedUploadTransportFailure
   final int? statusCode;
 }
 
+/// A server-side upload deferral that must not consume retry budget.
+final class RevclustOwnedUploadDeferred
+    extends RevclustOwnedUploadTransportResult {
+  const RevclustOwnedUploadDeferred({
+    required this.code,
+    required this.retryAfter,
+    this.message,
+    this.statusCode,
+  });
+
+  final String code;
+  final Duration retryAfter;
+  final String? message;
+  final int? statusCode;
+
+  RevclustUploadErrorCode get errorCode =>
+      RevclustUploadErrorCode.transportUnavailable;
+}
+
 /// Hosted upload transport used by the single-flight public facade coordinator.
 abstract interface class RevclustOwnedUploadTransport {
   Future<RevclustOwnedUploadTransportResult> upload({
@@ -175,6 +194,16 @@ final class HttpRevclustOwnedUploadTransport
     final String? message =
         error == null ? null : _readOptionalString(error, "message");
 
+    final RevclustOwnedUploadTransportResult? deferral = _mapDeferral(
+      code: code,
+      message: message,
+      statusCode: statusCode,
+      headers: response.headers,
+    );
+    if (deferral != null) {
+      return deferral;
+    }
+
     final RevclustOwnedUploadTransportResult? rejection = _mapRejection(
       code: code,
       message: message,
@@ -190,6 +219,26 @@ final class HttpRevclustOwnedUploadTransport
       message: message ?? "Hosted upload could not be completed.",
       statusCode: statusCode,
     );
+  }
+
+  RevclustOwnedUploadTransportResult? _mapDeferral({
+    required String? code,
+    required String? message,
+    required int? statusCode,
+    required Headers headers,
+  }) {
+    switch (code) {
+      case "billing_sync_required":
+      case "app_limit_remediation_required":
+        return RevclustOwnedUploadDeferred(
+          code: code!,
+          retryAfter: _readRetryAfter(headers),
+          message: message,
+          statusCode: statusCode,
+        );
+      default:
+        return null;
+    }
   }
 
   RevclustOwnedUploadTransportResult? _mapRejection({
@@ -296,6 +345,19 @@ final class HttpRevclustOwnedUploadTransport
         statusCode == 504;
   }
 
+  static Duration _readRetryAfter(Headers headers) {
+    const Duration fallback = Duration(seconds: 60);
+    final List<String>? values = headers["retry-after"];
+    if (values == null || values.length != 1) {
+      return fallback;
+    }
+    final int? seconds = int.tryParse(values.single.trim());
+    if (seconds == null || seconds <= 0) {
+      return fallback;
+    }
+    return Duration(seconds: seconds);
+  }
+
   static Map<String, Object?> _asObjectMap(dynamic value) {
     return _asObjectMapOrNull(value) ?? const <String, Object?>{};
   }
@@ -355,6 +417,8 @@ abstract interface class RevclustDrainBootstrapDelegate {
 
 /// Single-flight drain coordinator used behind the public facade runtime.
 final class RevclustOwnedUploadCoordinator {
+  static const String _pendingDeferralMarker = "owned_upload_deferred";
+
   RevclustOwnedUploadCoordinator({
     required LocalPackRepository repository,
     required RevclustDrainBootstrapDelegate bootstrapDelegate,
@@ -384,6 +448,7 @@ final class RevclustOwnedUploadCoordinator {
 
   Timer? _wakeTimer;
   Future<void>? _drainFuture;
+  int? _queueDeferredUntilUtcMs;
   bool _drainRequested = false;
   bool _drainStartScheduled = false;
   bool _isDisposed = false;
@@ -436,6 +501,39 @@ final class RevclustOwnedUploadCoordinator {
           return;
         }
 
+        final int nowUtcMs = _utcNow().millisecondsSinceEpoch;
+        final int? persistedDeferredUntilUtcMs =
+            await _repository.activePendingDeferralUntil(
+          nowUtcMs: nowUtcMs,
+          lastErrorCode: _pendingDeferralMarker,
+        );
+        int? queueDeferredUntilUtcMs = _queueDeferredUntilUtcMs;
+        if (persistedDeferredUntilUtcMs != null) {
+          queueDeferredUntilUtcMs = _laterUtcMs(
+            queueDeferredUntilUtcMs,
+            persistedDeferredUntilUtcMs,
+          );
+          _queueDeferredUntilUtcMs = queueDeferredUntilUtcMs;
+        }
+        if (queueDeferredUntilUtcMs != null) {
+          if (queueDeferredUntilUtcMs > nowUtcMs) {
+            await _repository.deferAllPendingUntil(
+              deferredUntilUtcMs: queueDeferredUntilUtcMs,
+            );
+            _scheduleWakeAt(queueDeferredUntilUtcMs);
+            return;
+          }
+          _queueDeferredUntilUtcMs = null;
+        }
+
+        final int? nextPendingAttemptAtUtcMs =
+            await _repository.nextPendingAttemptAt();
+        if (nextPendingAttemptAtUtcMs == null ||
+            nextPendingAttemptAtUtcMs > nowUtcMs) {
+          await _scheduleReadyWake();
+          return;
+        }
+
         final RevclustDrainAccess access =
             await _bootstrapDelegate.ensureReadyForDrain();
         if (access is RevclustDrainAccessUnavailable) {
@@ -454,10 +552,13 @@ final class RevclustOwnedUploadCoordinator {
 
         await _onQueueStateChanged();
         _onEvent(RevclustUploadStarted(captureId: claimed.captureId));
-        await _processClaimed(
+        final bool shouldContinue = await _processClaimed(
           claimed,
           (access as RevclustDrainAccessReady).lease,
         );
+        if (!shouldContinue) {
+          return;
+        }
       }
     } on Object catch (_) {
       if (_isDisposed) {
@@ -467,7 +568,7 @@ final class RevclustOwnedUploadCoordinator {
     }
   }
 
-  Future<void> _processClaimed(
+  Future<bool> _processClaimed(
     LocalPackRecord claimed,
     RevclustBootstrapLease lease,
   ) async {
@@ -501,7 +602,7 @@ final class RevclustOwnedUploadCoordinator {
           ),
           attemptsUsed: attemptsUsed,
         );
-        return;
+        return true;
       }
     }
 
@@ -520,7 +621,7 @@ final class RevclustOwnedUploadCoordinator {
             result: result.result,
           ),
         );
-        return;
+        return true;
       case RevclustOwnedUploadRejected():
         _bootstrapDelegate.discardConsumedLease(activeLease);
         await _repository.markFailed(
@@ -537,15 +638,65 @@ final class RevclustOwnedUploadCoordinator {
             message: result.message,
           ),
         );
-        return;
+        return true;
+      case RevclustOwnedUploadDeferred():
+        _bootstrapDelegate.discardConsumedLease(activeLease);
+        await _handleDeferred(claimed, result);
+        return false;
       case RevclustOwnedUploadTransportFailure():
         await _handleTransportFailure(
           claimed,
           result,
           attemptsUsed: attemptsUsed,
         );
-        return;
+        return true;
     }
+  }
+
+  Future<void> _handleDeferred(
+    LocalPackRecord claimed,
+    RevclustOwnedUploadDeferred result,
+  ) async {
+    final int nowUtcMs = _utcNow().millisecondsSinceEpoch;
+    final int requestedDeferredUntilUtcMs =
+        nowUtcMs + result.retryAfter.inMilliseconds;
+    int deferredUntilUtcMs = _laterUtcMs(
+      _queueDeferredUntilUtcMs,
+      requestedDeferredUntilUtcMs,
+    );
+    await _repository.releaseClaimForRetry(
+      claimed.captureId,
+      nextAttemptAtUtcMs: deferredUntilUtcMs,
+      lastErrorCode: _pendingDeferralMarker,
+      attemptsUsed: 0,
+    );
+    await _repository.deferAllPendingUntil(
+      deferredUntilUtcMs: deferredUntilUtcMs,
+    );
+    final int? persistedDeferredUntilUtcMs =
+        await _repository.activePendingDeferralUntil(
+      nowUtcMs: nowUtcMs,
+      lastErrorCode: _pendingDeferralMarker,
+    );
+    if (persistedDeferredUntilUtcMs != null &&
+        persistedDeferredUntilUtcMs > deferredUntilUtcMs) {
+      deferredUntilUtcMs = persistedDeferredUntilUtcMs;
+      await _repository.deferAllPendingUntil(
+        deferredUntilUtcMs: deferredUntilUtcMs,
+      );
+    }
+    _queueDeferredUntilUtcMs = deferredUntilUtcMs;
+    _onLastError(result.errorCode);
+    await _onQueueStateChanged();
+    _onEvent(
+      RevclustTransportFailure(
+        captureId: claimed.captureId,
+        statusCode: result.statusCode,
+        message: result.message,
+        retryable: true,
+      ),
+    );
+    _scheduleWakeAt(deferredUntilUtcMs);
   }
 
   Future<void> _handleTransportFailure(
@@ -657,6 +808,13 @@ final class RevclustOwnedUploadCoordinator {
       return first;
     }
     return first <= second ? first : second;
+  }
+
+  int _laterUtcMs(int? first, int second) {
+    if (first == null) {
+      return second;
+    }
+    return first >= second ? first : second;
   }
 
   void _scheduleWakeAt(int wakeAtUtcMs) {

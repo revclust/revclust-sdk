@@ -91,7 +91,7 @@ class DataStateField {
   bool get isHashedDomainId => _kind == _DataStateFieldKind.hashedDomainId;
 }
 
-/// Static allowlist used to resolve FR3 state snapshot fields at capture time.
+/// Static allowlist used to resolve state snapshot fields at capture time.
 class AllowlistedStateSnapshotProvider {
   AllowlistedStateSnapshotProvider({
     List<AppStateField> appStateFields = const <AppStateField>[],

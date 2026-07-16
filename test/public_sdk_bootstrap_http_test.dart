@@ -8,9 +8,9 @@ import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart";
 import "package:revclust_flutter_sdk/src/public/revclust_config.dart";
 import "package:revclust_flutter_sdk/src/public/revclust_diagnostics.dart";
 
-// Deliberately synthetic shape-valid test keys; never provision these.
-const String _liveProjectKey = "rpk_00000000000000000000000000000000";
-const String _missingProjectKey = "rpk_11111111111111111111111111111111";
+// Deliberately synthetic shape-valid test keys; never use these outside tests.
+const String _validSdkKey = "rpk_00000000000000000000000000000000";
+const String _missingSdkKey = "rpk_11111111111111111111111111111111";
 
 void main() {
   test("default config posts key-only body to canonical bootstrap endpoint",
@@ -29,7 +29,7 @@ void main() {
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
       RevclustConfig(
-        projectKey: _liveProjectKey,
+        projectKey: _validSdkKey,
         releaseStage: RevclustAppReleaseStage.production,
         appVersion: "1.2.3",
         build: "1203",
@@ -46,7 +46,7 @@ void main() {
     expect(
       jsonDecode(adapter.lastRequestBody ?? "") as Map<String, Object?>,
       <String, Object?>{
-        "project_key": _liveProjectKey,
+        "project_key": _validSdkKey,
       },
     );
     expect(
@@ -67,20 +67,20 @@ void main() {
         "ok": false,
         "error": <String, Object?>{
           "code": "project_not_provisioned",
-          "message": "Project key is not provisioned.",
+          "message": "SDK key is not available.",
         },
       }),
     );
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
-      RevclustConfig(projectKey: _missingProjectKey),
+      RevclustConfig(projectKey: _missingSdkKey),
     );
 
     expect(
       assessment.disposition,
       RevclustBootstrapDisposition.notProvisioned,
     );
-    expect(assessment.message, "Project key is not provisioned.");
+    expect(assessment.message, "SDK key is not available.");
     expect(
       assessment.diagnostics?.state,
       RevclustBootstrapDiagnosticState.notProvisioned,
@@ -99,13 +99,13 @@ void main() {
         "error": <String, Object?>{
           "code": "upload_auth_unavailable",
           "message":
-              "Do not expose sensitive_project_marker or sensitive_upload_marker.",
+              "Do not expose sensitive_key_marker or sensitive_upload_marker.",
         },
       }),
     );
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
-      RevclustConfig(projectKey: _liveProjectKey),
+      RevclustConfig(projectKey: _validSdkKey),
     );
 
     expect(
@@ -129,7 +129,7 @@ void main() {
     );
     expect(
       assessment.diagnostics?.message,
-      isNot(contains("sensitive_project")),
+      isNot(contains("sensitive_key")),
     );
     expect(
       assessment.diagnostics?.message,
@@ -144,13 +144,13 @@ void main() {
         "ok": false,
         "error": <String, Object?>{
           "code": "invalid_project_key",
-          "message": "Do not expose sensitive_project_marker.",
+          "message": "Do not expose sensitive_key_marker.",
         },
       }),
     );
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
-      RevclustConfig(projectKey: _liveProjectKey),
+      RevclustConfig(projectKey: _validSdkKey),
     );
 
     expect(
@@ -159,7 +159,7 @@ void main() {
     );
     expect(
       assessment.message,
-      "Project key is misconfigured.",
+      "SDK key is misconfigured.",
     );
     expect(
       assessment.diagnostics?.state,
@@ -168,10 +168,10 @@ void main() {
     expect(assessment.diagnostics?.lastHttpStatus, 400);
     expect(assessment.diagnostics?.errorCategory, "invalid_project_key");
     expect(assessment.diagnostics?.retryable, isFalse);
-    expect(assessment.diagnostics?.message, "Project key is misconfigured.");
+    expect(assessment.diagnostics?.message, "SDK key is misconfigured.");
     expect(
       assessment.diagnostics?.message,
-      isNot(contains("sensitive_project")),
+      isNot(contains("sensitive_key")),
     );
   });
 
@@ -182,14 +182,14 @@ void main() {
       responseBody: jsonEncode(<String, Object?>{
         "ok": false,
         "error": <String, Object?>{
-          "code": "sensitive_project_code",
-          "message": "raw request body included sensitive_project_marker",
+          "code": "sensitive_key_code",
+          "message": "raw request body included sensitive_key_marker",
         },
       }),
     );
 
     final RevclustBootstrapAssessment assessment = await probe.assess(
-      RevclustConfig(projectKey: _liveProjectKey),
+      RevclustConfig(projectKey: _validSdkKey),
     );
 
     expect(
@@ -207,11 +207,11 @@ void main() {
     expect(assessment.diagnostics?.errorCategory, "bootstrap_unavailable");
     expect(
       assessment.diagnostics?.message,
-      isNot(contains("sensitive_project")),
+      isNot(contains("sensitive_key")),
     );
     expect(
       assessment.diagnostics?.errorCategory,
-      isNot(contains("sensitive_project")),
+      isNot(contains("sensitive_key")),
     );
   });
 }

@@ -413,6 +413,60 @@ FROM $tableName
     );
   }
 
+  Future<int> deferAllPendingUntil({
+    required int deferredUntilUtcMs,
+  }) async {
+    if (deferredUntilUtcMs < 0) {
+      throw ArgumentError.value(
+        deferredUntilUtcMs,
+        "deferredUntilUtcMs",
+        "must be >= 0",
+      );
+    }
+    final sqflite.Database database = await _openDatabase();
+    return database.rawUpdate(
+      "UPDATE $tableName "
+      "SET next_attempt_at = CASE "
+      "WHEN next_attempt_at < ? THEN ? ELSE next_attempt_at END "
+      "WHERE status = ?",
+      <Object?>[
+        deferredUntilUtcMs,
+        deferredUntilUtcMs,
+        statusPending,
+      ],
+    );
+  }
+
+  Future<int?> activePendingDeferralUntil({
+    required int nowUtcMs,
+    required String lastErrorCode,
+  }) async {
+    if (nowUtcMs < 0) {
+      throw ArgumentError.value(nowUtcMs, "nowUtcMs", "must be >= 0");
+    }
+    final String normalizedErrorCode =
+        _normalizeRequiredString(lastErrorCode, "lastErrorCode");
+    final sqflite.Database database = await _openDatabase();
+    final List<Map<String, Object?>> rows = await database.rawQuery(
+      "SELECT MAX(next_attempt_at) AS deferred_until "
+      "FROM $tableName "
+      "WHERE status = ? AND last_error_code = ? AND next_attempt_at > ?",
+      <Object?>[
+        statusPending,
+        normalizedErrorCode,
+        nowUtcMs,
+      ],
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    final Object? rawValue = rows.single["deferred_until"];
+    if (rawValue == null) {
+      return null;
+    }
+    return _requireNonNegativeInt(rawValue, "deferred_until");
+  }
+
   Future<int> requeueExpiredClaims({
     required int claimLeaseMs,
   }) async {

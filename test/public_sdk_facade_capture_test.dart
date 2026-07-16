@@ -19,9 +19,9 @@ import "package:revclust_flutter_sdk/src/state/state_snapshot.dart";
 
 import "support/public_facade_local_capture_factory.dart";
 
-// Deliberately synthetic shape-valid test keys; never provision these.
-const String _primaryProjectKey = "rpk_00000000000000000000000000000000";
-const String _secondaryProjectKey = "rpk_11111111111111111111111111111111";
+// Deliberately synthetic shape-valid test keys; never use these outside tests.
+const String _primarySdkKey = "rpk_00000000000000000000000000000000";
+const String _secondarySdkKey = "rpk_11111111111111111111111111111111";
 
 void main() {
   late TestPublicFacadeLocalCaptureFactory localCaptureFactory;
@@ -138,7 +138,7 @@ void main() {
       );
     });
 
-    test("reviewed timeline breadcrumbs are captured in pre-trigger order",
+    test("timeline breadcrumbs are captured in pre-trigger order",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
         _readyAssessment(),
@@ -181,7 +181,7 @@ void main() {
       expect(transition["book_ref"], "book_ref_123");
     });
 
-    test("reviewed timeline breadcrumbs are best effort and bounded", () async {
+    test("timeline breadcrumbs are best effort and bounded", () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
         _readyAssessment(),
       );
@@ -508,22 +508,22 @@ void main() {
       expect(await localCaptureFactory.countPending(), 0);
     });
 
-    test("local storage scope changes across project keys", () {
+    test("local storage scope changes across SDK keys", () {
       final String firstDatabaseFileName = facade_internal
           .RevclustFacadeTestSupport.localStorageDatabaseFileName(
-        _config(projectKey: _primaryProjectKey),
+        _config(projectKey: _primarySdkKey),
       );
       final String secondDatabaseFileName = facade_internal
           .RevclustFacadeTestSupport.localStorageDatabaseFileName(
-        _config(projectKey: _secondaryProjectKey),
+        _config(projectKey: _secondarySdkKey),
       );
       final String firstStorageKey =
           facade_internal.RevclustFacadeTestSupport.localStorageKey(
-        _config(projectKey: _primaryProjectKey),
+        _config(projectKey: _primarySdkKey),
       );
       final String secondStorageKey =
           facade_internal.RevclustFacadeTestSupport.localStorageKey(
-        _config(projectKey: _secondaryProjectKey),
+        _config(projectKey: _secondarySdkKey),
       );
 
       expect(firstDatabaseFileName, isNot(secondDatabaseFileName));
@@ -536,7 +536,7 @@ void main() {
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
         _readyAssessment(),
-        config: facade.RevclustConfig(projectKey: _primaryProjectKey),
+        config: facade.RevclustConfig(projectKey: _primarySdkKey),
       );
 
       final facade.RevclustCaptureQueued queued = (await revclust
@@ -555,7 +555,7 @@ void main() {
 }
 
 facade.RevclustConfig _config({
-  String projectKey = _primaryProjectKey,
+  String projectKey = _primarySdkKey,
   facade.RevclustAppReleaseStage? releaseStage =
       facade.RevclustAppReleaseStage.staging,
   String? appVersion = "1.2.3",

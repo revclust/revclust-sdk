@@ -5,9 +5,9 @@ This example mirrors the current mobile setup path for
 
 It shows the minimum integration shape:
 
-- read the Revclust project key from `--dart-define`
+- read the Revclust SDK key from `--dart-define`
 - initialize `Revclust`
-- register a small reviewed state snapshot provider
+- register a small state snapshot provider
 - capture one explicit sample invariant failure and watch upload events
 
 The example is for Flutter mobile on `iOS` and `Android` only. It
@@ -25,8 +25,8 @@ flutter run \
   --dart-define=REVCLUST_PROJECT_KEY=rpk_...
 ```
 
-Replace the `rpk_...` key with the value provisioned for your team during
-setup.
+Replace the `rpk_...` value with the SDK key copied from the Revclust Apps
+page.
 
 Optional build metadata can be supplied by your existing build or CI system:
 
@@ -48,5 +48,5 @@ flutter run \
 5. If the accepted event includes a viewer URL, open that incident in the
    Revclust viewer.
 
-If the app starts without the required project key, it stays in an
+If the app starts without the required SDK key, it stays in an
 offline example mode and explains what configuration is missing.

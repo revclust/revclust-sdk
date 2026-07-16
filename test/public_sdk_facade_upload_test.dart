@@ -16,10 +16,10 @@ import "package:sqflite_common_ffi/sqflite_ffi.dart";
 import "support/in_memory_key_store.dart";
 import "support/public_facade_local_capture_factory.dart";
 
-// Deliberately synthetic shape-valid test keys; never provision these.
-const String _defaultProjectKey = "rpk_00000000000000000000000000000000";
-const String _misconfiguredProjectKey = "rpk_11111111111111111111111111111111";
-const String _missingProjectKey = "rpk_22222222222222222222222222222222";
+// Deliberately synthetic shape-valid test keys; never use these outside tests.
+const String _defaultSdkKey = "rpk_00000000000000000000000000000000";
+const String _misconfiguredSdkKey = "rpk_11111111111111111111111111111111";
+const String _missingSdkKey = "rpk_22222222222222222222222222222222";
 
 void main() {
   late int clockMs;
@@ -271,7 +271,8 @@ void main() {
       expect(revclust.uploadSnapshot.lastErrorCode, isNull);
     });
 
-    test("auth retry success discards the refreshed single-use lease", () async {
+    test("auth retry success discards the refreshed single-use lease",
+        () async {
       facade_internal.RevclustFacadeTestSupport.reset();
       await localCaptureFactory.dispose();
       localCaptureFactory = TestPublicFacadeLocalCaptureFactory(
@@ -524,7 +525,7 @@ void main() {
           _ScriptedBootstrapProbe(
         const <bootstrap_internal.RevclustBootstrapAssessment>[
           bootstrap_internal.RevclustBootstrapAssessment.misconfigured(
-            message: "Project key is misconfigured.",
+            message: "SDK key is misconfigured.",
           ),
         ],
       );
@@ -532,7 +533,7 @@ void main() {
           uploadTransport;
       final facade.Revclust misconfiguredFacade =
           await facade.Revclust.initialize(
-        _config(projectKey: _misconfiguredProjectKey),
+        _config(projectKey: _misconfiguredSdkKey),
       );
 
       expect(misconfiguredFacade.status, facade.RevclustStatus.misconfigured);
@@ -550,7 +551,7 @@ void main() {
           _ScriptedBootstrapProbe(
         const <bootstrap_internal.RevclustBootstrapAssessment>[
           bootstrap_internal.RevclustBootstrapAssessment.notProvisioned(
-            message: "Project key is not provisioned.",
+            message: "SDK key is not available.",
           ),
         ],
       );
@@ -558,7 +559,7 @@ void main() {
           uploadTransport;
       final facade.Revclust notProvisionedFacade =
           await facade.Revclust.initialize(
-        _config(projectKey: _missingProjectKey),
+        _config(projectKey: _missingSdkKey),
       );
 
       expect(
@@ -687,6 +688,532 @@ void main() {
       expect(revclust.uploadSnapshot.pendingCount, 0);
       expect(revclust.uploadSnapshot.uploadingCount, 0);
       expect(revclust.uploadSnapshot.lastErrorCode, isNull);
+    });
+
+    test(
+        "server deferrals preserve retry budget and require fresh leases",
+        () async {
+      int deferredCount = 0;
+      int deferredClockMs = 1000;
+      final _RepositoryHarness<low_level.LocalPackRepository>
+          repositoryHarness = await _openRepository(
+        utcNowMs: () => deferredClockMs,
+      );
+      addTearDown(repositoryHarness.dispose);
+      final low_level.LocalPackRepository repository =
+          repositoryHarness.repository;
+      await repository.savePending(
+        buildSeededPackResult(captureId: "cap_deferred_001"),
+      );
+
+      final _FreshLeaseDrainBootstrapDelegate bootstrapDelegate =
+          _FreshLeaseDrainBootstrapDelegate();
+      final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
+        (low_level.LocalPackRecord claimedPack,
+            bootstrap_internal.RevclustBootstrapLease _) async {
+          if (deferredCount < 4) {
+            deferredCount += 1;
+            final bool billingSync = deferredCount.isOdd;
+            return upload_internal.RevclustOwnedUploadDeferred(
+              code: billingSync
+                  ? "billing_sync_required"
+                  : "app_limit_remediation_required",
+              retryAfter: const Duration(seconds: 60),
+              message: "Workspace capture is temporarily paused.",
+              statusCode: billingSync ? 503 : 409,
+            );
+          }
+          return upload_internal.RevclustOwnedUploadAccepted(
+            facade.RevclustAcceptedResult(
+              packId: "ppk_deferred_ok",
+              schemaVersion: "1.0.0",
+              blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
+              acceptedAt: DateTime.parse("2026-03-28T12:35:00Z"),
+            ),
+          );
+        },
+      );
+      final List<facade.RevclustUploadEvent> events =
+          <facade.RevclustUploadEvent>[];
+      final upload_internal.RevclustOwnedUploadCoordinator coordinator =
+          upload_internal.RevclustOwnedUploadCoordinator(
+        repository: repository,
+        bootstrapDelegate: bootstrapDelegate,
+        transport: uploadTransport,
+        retryPolicy: const upload_internal.RevclustOwnedUploadRetryPolicy(
+          maxAttempts: 1,
+        ),
+        utcNow: _utcNowFactory(() => deferredClockMs),
+        onQueueStateChanged: () async {},
+        onLastError: (_) {},
+        onEvent: events.add,
+      );
+      addTearDown(coordinator.dispose);
+
+      coordinator.requestDrain();
+      for (int index = 0; index < 4; index += 1) {
+        await _waitFor(() async {
+          final low_level.LocalPackRecord? record =
+              await repository.getById("cap_deferred_001");
+          return uploadTransport.callCount == index + 1 &&
+              events.length == (index + 1) * 2 &&
+              record?.status == low_level.LocalPackRepository.statusPending;
+        });
+
+        final low_level.LocalPackRecord? deferredRecord =
+            await repository.getById("cap_deferred_001");
+        expect(deferredRecord, isNotNull);
+        expect(deferredRecord!.attemptCount, 0);
+        expect(
+          deferredRecord.nextAttemptAtUtcMs,
+          deferredClockMs + const Duration(seconds: 60).inMilliseconds,
+        );
+        expect(events[index * 2], isA<facade.RevclustUploadStarted>());
+        expect(
+          events[(index * 2) + 1],
+          isA<facade.RevclustTransportFailure>(),
+        );
+        expect(
+          (events[(index * 2) + 1] as facade.RevclustTransportFailure)
+              .retryable,
+          isTrue,
+        );
+
+        await _drainEventQueue();
+        expect(uploadTransport.callCount, index + 1);
+
+        deferredClockMs += const Duration(seconds: 60).inMilliseconds;
+        coordinator.requestDrain();
+      }
+
+      await _waitFor(() async {
+        final low_level.LocalPackRecord? record =
+            await repository.getById("cap_deferred_001");
+        return uploadTransport.callCount == 5 &&
+            record?.status == low_level.LocalPackRepository.statusUploaded;
+      });
+
+      final low_level.LocalPackRecord? uploadedRecord =
+          await repository.getById("cap_deferred_001");
+      expect(uploadedRecord, isNotNull);
+      expect(uploadedRecord!.attemptCount, 1);
+      expect(uploadTransport.authTokens, <String>[
+        "incident_lease_1",
+        "incident_lease_2",
+        "incident_lease_3",
+        "incident_lease_4",
+        "incident_lease_5",
+      ]);
+      expect(
+        bootstrapDelegate.discardedAuthTokens,
+        uploadTransport.authTokens,
+      );
+      expect(events.whereType<facade.RevclustTransportFailure>(), hasLength(4));
+      expect(events.last, isA<facade.RevclustUploadAccepted>());
+    });
+
+    test("server deferral pauses the whole pending queue", () async {
+      int deferredClockMs = 1000;
+      final _RepositoryHarness<low_level.LocalPackRepository>
+          repositoryHarness = await _openRepository(
+        utcNowMs: () => deferredClockMs,
+      );
+      addTearDown(repositoryHarness.dispose);
+      final low_level.LocalPackRepository repository =
+          repositoryHarness.repository;
+      await repository.savePending(
+        buildSeededPackResult(captureId: "cap_queue_deferred_first"),
+      );
+
+      final _FreshLeaseDrainBootstrapDelegate bootstrapDelegate =
+          _FreshLeaseDrainBootstrapDelegate();
+      bool deferredOnce = false;
+      final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
+        (low_level.LocalPackRecord claimedPack,
+            bootstrap_internal.RevclustBootstrapLease _) async {
+          if (!deferredOnce) {
+            deferredOnce = true;
+            return const upload_internal.RevclustOwnedUploadDeferred(
+              code: "billing_sync_required",
+              retryAfter: Duration(seconds: 60),
+              message: "Workspace billing is still syncing.",
+              statusCode: 503,
+            );
+          }
+          return upload_internal.RevclustOwnedUploadAccepted(
+            facade.RevclustAcceptedResult(
+              packId: "pack_${claimedPack.captureId}",
+              schemaVersion: "1.0.0",
+              blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
+              acceptedAt: DateTime.parse("2026-03-28T12:40:00Z"),
+            ),
+          );
+        },
+      );
+      final List<facade.RevclustUploadEvent> events =
+          <facade.RevclustUploadEvent>[];
+      final upload_internal.RevclustOwnedUploadCoordinator coordinator =
+          upload_internal.RevclustOwnedUploadCoordinator(
+        repository: repository,
+        bootstrapDelegate: bootstrapDelegate,
+        transport: uploadTransport,
+        retryPolicy: const upload_internal.RevclustOwnedUploadRetryPolicy(
+          maxAttempts: 1,
+        ),
+        utcNow: _utcNowFactory(() => deferredClockMs),
+        onQueueStateChanged: () async {},
+        onLastError: (_) {},
+        onEvent: events.add,
+      );
+      addTearDown(coordinator.dispose);
+
+      coordinator.requestDrain();
+      await _waitFor(() async {
+        final low_level.LocalPackRecord? record =
+            await repository.getById("cap_queue_deferred_first");
+        return uploadTransport.callCount == 1 &&
+            record?.status == low_level.LocalPackRepository.statusPending;
+      });
+
+      await repository.savePending(
+        buildSeededPackResult(captureId: "cap_queue_deferred_second"),
+      );
+      coordinator.requestDrain();
+      await _drainEventQueue();
+
+      final low_level.LocalPackRecord? firstDeferred =
+          await repository.getById("cap_queue_deferred_first");
+      final low_level.LocalPackRecord? secondDeferred =
+          await repository.getById("cap_queue_deferred_second");
+      expect(
+        firstDeferred?.status,
+        low_level.LocalPackRepository.statusPending,
+      );
+      expect(
+        secondDeferred?.status,
+        low_level.LocalPackRepository.statusPending,
+      );
+      expect(firstDeferred?.attemptCount, 0);
+      expect(secondDeferred?.attemptCount, 0);
+      expect(
+        secondDeferred?.nextAttemptAtUtcMs,
+        1000 + const Duration(seconds: 60).inMilliseconds,
+      );
+      expect(firstDeferred?.lastErrorCode, "owned_upload_deferred");
+      expect(secondDeferred?.lastErrorCode, isNull);
+      expect(uploadTransport.callCount, 1);
+      expect(bootstrapDelegate.ensureCallCount, 1);
+
+      deferredClockMs += const Duration(seconds: 59).inMilliseconds;
+      coordinator.requestDrain();
+      await _drainEventQueue();
+      expect(uploadTransport.callCount, 1);
+      expect(bootstrapDelegate.ensureCallCount, 1);
+
+      deferredClockMs += const Duration(seconds: 1).inMilliseconds;
+      coordinator.requestDrain();
+      await _waitFor(() async {
+        final low_level.LocalPackQueueState queueState =
+            await repository.describeQueue();
+        return uploadTransport.callCount == 3 &&
+            queueState.pendingCount == 0 &&
+            queueState.uploadingCount == 0;
+      });
+
+      final low_level.LocalPackRecord? firstUploaded =
+          await repository.getById("cap_queue_deferred_first");
+      final low_level.LocalPackRecord? secondUploaded =
+          await repository.getById("cap_queue_deferred_second");
+      expect(
+        firstUploaded?.status,
+        low_level.LocalPackRepository.statusUploaded,
+      );
+      expect(
+        secondUploaded?.status,
+        low_level.LocalPackRepository.statusUploaded,
+      );
+      expect(firstUploaded?.attemptCount, 1);
+      expect(secondUploaded?.attemptCount, 1);
+      expect(uploadTransport.authTokens, <String>[
+        "incident_lease_1",
+        "incident_lease_2",
+        "incident_lease_3",
+      ]);
+      expect(
+        bootstrapDelegate.discardedAuthTokens,
+        uploadTransport.authTokens,
+      );
+      expect(
+        events.whereType<facade.RevclustTransportFailure>(),
+        hasLength(1),
+      );
+      expect(events.whereType<facade.RevclustUploadAccepted>(), hasLength(2));
+    });
+
+    test("server deferral survives coordinator restart", () async {
+      int deferredClockMs = 1000;
+      final _RepositoryHarness<low_level.LocalPackRepository>
+          repositoryHarness = await _openRepository(
+        utcNowMs: () => deferredClockMs,
+      );
+      addTearDown(repositoryHarness.dispose);
+      final low_level.LocalPackRepository repository =
+          repositoryHarness.repository;
+      await repository.savePending(
+        buildSeededPackResult(captureId: "cap_restart_deferred_first"),
+      );
+      deferredClockMs += 1;
+      await repository.savePending(
+        buildSeededPackResult(captureId: "cap_restart_deferred_second"),
+      );
+
+      final _FreshLeaseDrainBootstrapDelegate bootstrapDelegate =
+          _FreshLeaseDrainBootstrapDelegate();
+      bool deferredOnce = false;
+      final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
+        (low_level.LocalPackRecord claimedPack,
+            bootstrap_internal.RevclustBootstrapLease _) async {
+          if (!deferredOnce) {
+            deferredOnce = true;
+            return const upload_internal.RevclustOwnedUploadDeferred(
+              code: "app_limit_remediation_required",
+              retryAfter: Duration(seconds: 60),
+              message: "Workspace app capacity must be remediated.",
+              statusCode: 409,
+            );
+          }
+          return upload_internal.RevclustOwnedUploadAccepted(
+            facade.RevclustAcceptedResult(
+              packId: "pack_${claimedPack.captureId}",
+              schemaVersion: "1.0.0",
+              blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
+              acceptedAt: DateTime.parse("2026-03-28T12:45:00Z"),
+            ),
+          );
+        },
+      );
+      upload_internal.RevclustOwnedUploadCoordinator coordinator =
+          upload_internal.RevclustOwnedUploadCoordinator(
+        repository: repository,
+        bootstrapDelegate: bootstrapDelegate,
+        transport: uploadTransport,
+        retryPolicy: const upload_internal.RevclustOwnedUploadRetryPolicy(
+          maxAttempts: 1,
+        ),
+        utcNow: _utcNowFactory(() => deferredClockMs),
+        onQueueStateChanged: () async {},
+        onLastError: (_) {},
+        onEvent: (_) {},
+      );
+      addTearDown(() => coordinator.dispose());
+
+      coordinator.requestDrain();
+      await _waitFor(() async {
+        final low_level.LocalPackRecord? first =
+            await repository.getById("cap_restart_deferred_first");
+        final low_level.LocalPackRecord? second =
+            await repository.getById("cap_restart_deferred_second");
+        return uploadTransport.callCount == 1 &&
+            first?.status == low_level.LocalPackRepository.statusPending &&
+            second?.status == low_level.LocalPackRepository.statusPending;
+      });
+
+      final int deferredUntilUtcMs =
+          deferredClockMs + const Duration(seconds: 60).inMilliseconds;
+      final low_level.LocalPackRecord? firstDeferred =
+          await repository.getById("cap_restart_deferred_first");
+      final low_level.LocalPackRecord? secondDeferred =
+          await repository.getById("cap_restart_deferred_second");
+      expect(firstDeferred?.nextAttemptAtUtcMs, deferredUntilUtcMs);
+      expect(secondDeferred?.nextAttemptAtUtcMs, deferredUntilUtcMs);
+      expect(firstDeferred?.attemptCount, 0);
+      expect(secondDeferred?.attemptCount, 0);
+      expect(
+        firstDeferred?.lastErrorCode,
+        "owned_upload_deferred",
+      );
+      expect(
+        secondDeferred?.lastErrorCode,
+        isNull,
+      );
+
+      coordinator.dispose();
+      coordinator = upload_internal.RevclustOwnedUploadCoordinator(
+        repository: repository,
+        bootstrapDelegate: bootstrapDelegate,
+        transport: uploadTransport,
+        retryPolicy: const upload_internal.RevclustOwnedUploadRetryPolicy(
+          maxAttempts: 1,
+        ),
+        utcNow: _utcNowFactory(() => deferredClockMs),
+        onQueueStateChanged: () async {},
+        onLastError: (_) {},
+        onEvent: (_) {},
+      );
+
+      await repository.savePending(
+        buildSeededPackResult(captureId: "cap_restart_deferred_third"),
+      );
+      coordinator.requestDrain();
+      await _drainEventQueue();
+      expect(uploadTransport.callCount, 1);
+      expect(bootstrapDelegate.ensureCallCount, 1);
+      final low_level.LocalPackRecord? thirdDeferred =
+          await repository.getById("cap_restart_deferred_third");
+      expect(
+        thirdDeferred?.status,
+        low_level.LocalPackRepository.statusPending,
+      );
+      expect(thirdDeferred?.nextAttemptAtUtcMs, deferredUntilUtcMs);
+      expect(thirdDeferred?.attemptCount, 0);
+      expect(thirdDeferred?.lastErrorCode, isNull);
+
+      deferredClockMs = deferredUntilUtcMs;
+      coordinator.requestDrain();
+      await _waitFor(() async {
+        final low_level.LocalPackQueueState queueState =
+            await repository.describeQueue();
+        return uploadTransport.callCount == 4 &&
+            queueState.pendingCount == 0 &&
+            queueState.uploadingCount == 0;
+      });
+
+      final low_level.LocalPackRecord? firstUploaded =
+          await repository.getById("cap_restart_deferred_first");
+      final low_level.LocalPackRecord? secondUploaded =
+          await repository.getById("cap_restart_deferred_second");
+      final low_level.LocalPackRecord? thirdUploaded =
+          await repository.getById("cap_restart_deferred_third");
+      expect(
+        firstUploaded?.status,
+        low_level.LocalPackRepository.statusUploaded,
+      );
+      expect(
+        secondUploaded?.status,
+        low_level.LocalPackRepository.statusUploaded,
+      );
+      expect(
+        thirdUploaded?.status,
+        low_level.LocalPackRepository.statusUploaded,
+      );
+      expect(firstUploaded?.attemptCount, 1);
+      expect(secondUploaded?.attemptCount, 1);
+      expect(thirdUploaded?.attemptCount, 1);
+      expect(uploadTransport.authTokens, <String>[
+        "incident_lease_1",
+        "incident_lease_2",
+        "incident_lease_3",
+        "incident_lease_4",
+      ]);
+      expect(
+        bootstrapDelegate.discardedAuthTokens,
+        uploadTransport.authTokens,
+      );
+    });
+
+    test("queue deferral does not globalize a longer ordinary retry", () async {
+      int deferredClockMs = 1000;
+      final _RepositoryHarness<low_level.LocalPackRepository>
+          repositoryHarness = await _openRepository(
+        utcNowMs: () => deferredClockMs,
+      );
+      addTearDown(repositoryHarness.dispose);
+      final low_level.LocalPackRepository repository =
+          repositoryHarness.repository;
+      await repository.savePending(
+        buildSeededPackResult(captureId: "cap_ordinary_long_retry"),
+      );
+      await repository.claimNextUploadable();
+      const int ordinaryRetryAtUtcMs = 121000;
+      await repository.releaseClaimForRetry(
+        "cap_ordinary_long_retry",
+        nextAttemptAtUtcMs: ordinaryRetryAtUtcMs,
+        lastErrorCode: "transportUnavailable",
+        attemptsUsed: 1,
+      );
+      deferredClockMs += 1;
+      await repository.savePending(
+        buildSeededPackResult(captureId: "cap_server_deferred"),
+      );
+
+      final _FreshLeaseDrainBootstrapDelegate bootstrapDelegate =
+          _FreshLeaseDrainBootstrapDelegate();
+      bool deferredOnce = false;
+      final _FakeUploadTransport uploadTransport = _FakeUploadTransport(
+        (low_level.LocalPackRecord claimedPack,
+            bootstrap_internal.RevclustBootstrapLease _) async {
+          if (!deferredOnce) {
+            deferredOnce = true;
+            return const upload_internal.RevclustOwnedUploadDeferred(
+              code: "billing_sync_required",
+              retryAfter: Duration(seconds: 60),
+              statusCode: 503,
+            );
+          }
+          return upload_internal.RevclustOwnedUploadAccepted(
+            facade.RevclustAcceptedResult(
+              packId: "pack_${claimedPack.captureId}",
+              schemaVersion: "1.0.0",
+              blobBytesGzip: claimedPack.gzipBytes.lengthInBytes,
+              acceptedAt: DateTime.parse("2026-03-28T12:50:00Z"),
+            ),
+          );
+        },
+      );
+      final upload_internal.RevclustOwnedUploadCoordinator coordinator =
+          upload_internal.RevclustOwnedUploadCoordinator(
+        repository: repository,
+        bootstrapDelegate: bootstrapDelegate,
+        transport: uploadTransport,
+        retryPolicy: const upload_internal.RevclustOwnedUploadRetryPolicy(
+          maxAttempts: 2,
+        ),
+        utcNow: _utcNowFactory(() => deferredClockMs),
+        onQueueStateChanged: () async {},
+        onLastError: (_) {},
+        onEvent: (_) {},
+      );
+      addTearDown(coordinator.dispose);
+
+      coordinator.requestDrain();
+      await _waitFor(() async {
+        final low_level.LocalPackRecord? deferred =
+            await repository.getById("cap_server_deferred");
+        return uploadTransport.callCount == 1 &&
+            deferred?.status == low_level.LocalPackRepository.statusPending;
+      });
+
+      final int queueDeferredUntilUtcMs =
+          deferredClockMs + const Duration(seconds: 60).inMilliseconds;
+      final low_level.LocalPackRecord? ordinaryDeferred =
+          await repository.getById("cap_ordinary_long_retry");
+      final low_level.LocalPackRecord? serverDeferred =
+          await repository.getById("cap_server_deferred");
+      expect(ordinaryDeferred?.nextAttemptAtUtcMs, ordinaryRetryAtUtcMs);
+      expect(ordinaryDeferred?.lastErrorCode, "transportUnavailable");
+      expect(ordinaryDeferred?.attemptCount, 1);
+      expect(serverDeferred?.nextAttemptAtUtcMs, queueDeferredUntilUtcMs);
+      expect(serverDeferred?.lastErrorCode, "owned_upload_deferred");
+
+      deferredClockMs = queueDeferredUntilUtcMs;
+      coordinator.requestDrain();
+      await _waitFor(() async {
+        final low_level.LocalPackRecord? uploaded =
+            await repository.getById("cap_server_deferred");
+        return uploadTransport.callCount == 2 &&
+            uploaded?.status == low_level.LocalPackRepository.statusUploaded;
+      });
+
+      final low_level.LocalPackRecord? ordinaryStillPending =
+          await repository.getById("cap_ordinary_long_retry");
+      expect(
+        ordinaryStillPending?.status,
+        low_level.LocalPackRepository.statusPending,
+      );
+      expect(ordinaryStillPending?.nextAttemptAtUtcMs, ordinaryRetryAtUtcMs);
+      expect(ordinaryStillPending?.lastErrorCode, "transportUnavailable");
+      expect(ordinaryStillPending?.attemptCount, 1);
+      expect(bootstrapDelegate.ensureCallCount, 2);
     });
 
     test("retry exhaustion moves the item to terminal failed", () async {
@@ -1162,7 +1689,7 @@ void main() {
 }
 
 facade.RevclustConfig _config({
-  String projectKey = _defaultProjectKey,
+  String projectKey = _defaultSdkKey,
 }) {
   return facade.RevclustConfig(
     projectKey: projectKey,
@@ -1307,6 +1834,30 @@ final class _FixedDrainBootstrapDelegate
 
   @override
   void discardConsumedLease(bootstrap_internal.RevclustBootstrapLease lease) {}
+}
+
+final class _FreshLeaseDrainBootstrapDelegate
+    implements upload_internal.RevclustDrainBootstrapDelegate {
+  int ensureCallCount = 0;
+  final List<String> discardedAuthTokens = <String>[];
+
+  @override
+  Future<upload_internal.RevclustDrainAccess> ensureReadyForDrain() async {
+    ensureCallCount += 1;
+    return upload_internal.RevclustDrainAccessReady(
+      _readyAssessment(token: "incident_lease_$ensureCallCount").lease!,
+    );
+  }
+
+  @override
+  Future<upload_internal.RevclustDrainAccess> refreshAfterAuthFailure() {
+    return ensureReadyForDrain();
+  }
+
+  @override
+  void discardConsumedLease(bootstrap_internal.RevclustBootstrapLease lease) {
+    discardedAuthTokens.add(lease.authToken);
+  }
 }
 
 final class _RepositoryHarness<T extends low_level.LocalPackRepository> {

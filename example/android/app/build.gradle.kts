@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Unique application ID for the SDK example app.
         applicationId = "dev.revclust.revclust_flutter_sdk_example"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -32,8 +32,7 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // The example signs release builds with debug keys for local runs.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

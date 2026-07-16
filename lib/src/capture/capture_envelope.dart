@@ -36,10 +36,10 @@ class CaptureEnvelope {
   /// Timeline events sliced for this capture.
   final List<TimelineEvent> timeline;
 
-  /// FR2 runtime conditions snapped at capture time for later pack building.
+  /// Runtime conditions snapped at capture time for later pack building.
   final CapturedRuntimeConditions runtimeConditions;
 
-  /// FR3 allowlisted state snapped at capture time for later pack building.
+  /// Allowlisted state snapped at capture time for later pack building.
   final CapturedStateSnapshot stateSnapshot;
 
   static String _normalizeRequiredString(String value, String name) {

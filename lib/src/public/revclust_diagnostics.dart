@@ -49,7 +49,7 @@ final class RevclustBootstrapDiagnostics {
   /// Whether retrying may reasonably recover.
   final bool? retryable;
 
-  /// Partner-safe diagnostic message.
+  /// Safe diagnostic message.
   final String? message;
 }
 

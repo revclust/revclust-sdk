@@ -1,6 +1,6 @@
 import "../observability/sdk_logger.dart";
 
-/// Typed SDK configuration placeholders for early package bootstrapping.
+/// Typed SDK configuration used by the low-level capture pipeline.
 class SdkConfig {
   /// Creates a minimal SDK configuration.
   SdkConfig({
@@ -107,16 +107,16 @@ class SdkConfig {
   /// Maximum estimated bytes retained in memory before oldest eviction.
   final int maxTimelineBytes;
 
-  /// Maximum combined state keys retained in an FR3 snapshot.
+  /// Maximum combined state keys retained in a state snapshot.
   final int maxStateKeys;
 
-  /// Maximum JSON bytes retained for an FR3 state snapshot object.
+  /// Maximum JSON bytes retained for a state snapshot object.
   final int maxStateBytes;
 
-  /// Maximum string length retained for FR3 string/enum values.
+  /// Maximum string length retained for state snapshot string/enum values.
   final int maxStringLen;
 
-  /// Per-project salt used when hashing FR3 data-state domain IDs.
+  /// App-specific salt used when hashing data-state domain IDs.
   final String? stateHashSalt;
 
   /// Current app version used for update-context detection when provided.
@@ -128,7 +128,7 @@ class SdkConfig {
   /// Optional source revision attached to captured pack conditions.
   final String? gitSha;
 
-  /// Partner app release-stage metadata attached to captured packs.
+  /// App release-stage metadata attached to captured packs.
   final String? appReleaseStage;
 
   static final RegExp _gitShaPattern = RegExp(r"^[0-9a-f]{7,40}$");

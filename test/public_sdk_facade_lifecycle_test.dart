@@ -14,11 +14,11 @@ import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
 
 import "support/public_facade_local_capture_factory.dart";
 
-// Deliberately synthetic shape-valid test keys; never provision these.
-const String _defaultProjectKey = "rpk_00000000000000000000000000000000";
-const String _firstProjectKey = "rpk_11111111111111111111111111111111";
-const String _recoveredProjectKey = "rpk_22222222222222222222222222222222";
-const String _conflictingProjectKey = "rpk_33333333333333333333333333333333";
+// Deliberately synthetic shape-valid test keys; never use these outside tests.
+const String _defaultSdkKey = "rpk_00000000000000000000000000000000";
+const String _firstSdkKey = "rpk_11111111111111111111111111111111";
+const String _recoveredSdkKey = "rpk_22222222222222222222222222222222";
+const String _conflictingSdkKey = "rpk_33333333333333333333333333333333";
 
 void main() {
   late TestPublicFacadeLocalCaptureFactory localCaptureFactory;
@@ -167,7 +167,7 @@ void main() {
       );
 
       await expectLater(
-        facade.Revclust.initialize(_config(projectKey: _firstProjectKey)),
+        facade.Revclust.initialize(_config(projectKey: _firstSdkKey)),
         throwsA(
           isA<StateError>().having(
             (StateError error) => error.toString(),
@@ -178,7 +178,7 @@ void main() {
       );
 
       final facade.Revclust recoveredFacade = await facade.Revclust.initialize(
-        _config(projectKey: _recoveredProjectKey),
+        _config(projectKey: _recoveredSdkKey),
       );
 
       expect(localCaptureFactory.createCallCount, 2);
@@ -189,7 +189,7 @@ void main() {
           (facade_internal.RevclustFacadeReady state) =>
               state.config?.projectKey,
           "projectKey",
-          _recoveredProjectKey,
+          _recoveredSdkKey,
         ),
       );
     });
@@ -209,7 +209,7 @@ void main() {
 
       await expectLater(
         facade.Revclust.initialize(
-          _config(projectKey: _conflictingProjectKey),
+          _config(projectKey: _conflictingSdkKey),
         ),
         throwsA(
           isA<StateError>().having(
@@ -232,7 +232,7 @@ void main() {
 
       await expectLater(
         facade.Revclust.initialize(
-          _config(projectKey: _conflictingProjectKey),
+          _config(projectKey: _conflictingSdkKey),
         ),
         throwsA(
           isA<StateError>().having(
@@ -346,7 +346,7 @@ void main() {
           revclust.diagnostics.bootstrap.errorCategory,
           revclust.diagnostics.bootstrap.message,
         ].join(" "),
-        isNot(contains(_defaultProjectKey)),
+        isNot(contains(_defaultSdkKey)),
       );
     });
 
@@ -354,7 +354,7 @@ void main() {
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
         const bootstrap_internal.RevclustBootstrapAssessment.misconfigured(
-          message: "Project key is misconfigured.",
+          message: "SDK key is misconfigured.",
         ),
       );
 
@@ -372,11 +372,11 @@ void main() {
       expect(blocked.message, contains("misconfigured"));
     });
 
-    test("not provisioned bootstrap stays visible and blocks capture",
+    test("unavailable SDK key bootstrap stays visible and blocks capture",
         () async {
       final facade.Revclust revclust = await _initializeWithAssessment(
         const bootstrap_internal.RevclustBootstrapAssessment.notProvisioned(
-          message: "Project key is not provisioned.",
+          message: "SDK key is not available.",
         ),
       );
 
@@ -391,7 +391,7 @@ void main() {
               as facade.RevclustCaptureBlocked;
 
       expect(blocked.status, facade.RevclustStatus.notProvisioned);
-      expect(blocked.message, contains("not provisioned"));
+      expect(blocked.message, contains("SDK key is not available"));
     });
 
     test("uploadBlocked stays visible while local queueing remains allowed",
@@ -500,7 +500,7 @@ void main() {
 }
 
 facade.RevclustConfig _config({
-  String projectKey = _defaultProjectKey,
+  String projectKey = _defaultSdkKey,
 }) {
   return facade.RevclustConfig(
     projectKey: projectKey,
