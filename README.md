@@ -1,65 +1,55 @@
 # revclust_flutter
 
-Flutter SDK for integrating a Flutter app with the Revclust hosted incident-capture service.
+Flutter SDK for capturing structured incident evidence from Flutter apps.
 
-Revclust is a product of ASTROSCEND LIMITED.
+Use it to capture app state, device context, and expected/observed values around
+production incidents.
 
 ## Install
 
-Add the SDK from pub.dev.
-
 ```yaml
 dependencies:
-  revclust_flutter: ^0.5.0
+  revclust_flutter: ^0.5.1
 ```
 
-If Revclust gives you a specific git tag for a preview build, pin that tag
-explicitly instead of using a moving branch.
+## Quick Start
 
-## Requirements
-
-- Dart `>=3.3.0 <4.0.0`
-- Flutter `>=3.19.0`
-
-## Platform Scope
-
-This SDK is for Flutter mobile apps on `iOS` and `Android`. Flutter web and
-desktop runtimes are not part of the current support boundary.
-
-## Supported Entrypoint
-
-Use the supported SDK entrypoint:
+Create an app in Revclust, copy its SDK key, then initialize the SDK.
 
 ```dart
+import "package:flutter/widgets.dart";
 import "package:revclust_flutter/revclust_flutter.dart";
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final revclust = await Revclust.initialize(
+    RevclustConfig(
+      projectKey: const String.fromEnvironment("REVCLUST_PROJECT_KEY"),
+    ),
+  );
+
+  runApp(MyApp(revclust: revclust));
+}
 ```
 
-This is the supported entrypoint for app integrations.
+Pass the SDK key at run or build time:
 
-## Setup Docs
+```bash
+flutter run --dart-define=REVCLUST_PROJECT_KEY=rpk_...
+```
 
-After adding the dependency, follow the Revclust setup docs for:
+## What Next
 
-- SDK key configuration
-- initialization and status checks
-- state snapshot setup and the first explicit capture
-- first incident verification and troubleshooting
+Follow the setup guide to add a state snapshot provider, capture your first
+incident, and open it in Revclust.
 
-## Release Policy
+[Read the docs](https://revclust.com/docs)
 
-Revclust publishes supported SDK releases on pub.dev.
+## Platforms
 
-## License And Service Boundary
+Revclust supports Flutter mobile apps on Android and iOS.
 
-The Revclust Flutter SDK is open-source under the MIT License.
+## License
 
-Hosted Revclust service access is governed by your Revclust account and the Revclust Terms.
-
-## Support
-
-For setup help, first-incident verification, and operational support, use the
-Revclust docs and support.
-
-This public repository publishes the SDK. External issue
-reports and pull requests are not the normal support path unless Revclust has
-explicitly invited them.
+This package is licensed under the MIT License. See [LICENSE](LICENSE).
