@@ -13,7 +13,7 @@ dependencies:
   revclust_flutter_sdk:
     git:
       url: https://github.com/revclust/revclust-sdk.git
-      ref: v0.4.2
+      ref: v0.4.3
 ```
 
 Use the released tag provided by Revclust.
@@ -55,9 +55,9 @@ Pin your app to a specific tag. Use a commit only when Revclust explicitly provi
 
 ## License And Service Boundary
 
-This SDK is source-available under the Revclust SDK License. It is not open source.
+The Revclust Flutter SDK is open-source under the MIT License.
 
-The SDK license covers the SDK source code only. Hosted Revclust service access is governed by your Revclust account and plan.
+Hosted Revclust service access is governed by your Revclust account and the Revclust Terms.
 
 ## Support
 
