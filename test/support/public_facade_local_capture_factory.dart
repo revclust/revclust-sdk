@@ -2,13 +2,13 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
-import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
+import "package:revclust_flutter/revclust_flutter.dart" as facade;
+import "package:revclust_flutter/src/internal/revclust_internal.dart"
     as low_level;
-import "package:revclust_flutter_sdk/src/persistence/revclust_database_factory.dart";
-import "package:revclust_flutter_sdk/src/public/revclust_local_capture.dart"
+import "package:revclust_flutter/src/persistence/revclust_database_factory.dart";
+import "package:revclust_flutter/src/public/revclust_local_capture.dart"
     as facade_internal;
-import "package:revclust_flutter_sdk/src/update_context/session_state_store.dart";
+import "package:revclust_flutter/src/update_context/session_state_store.dart";
 
 import "in_memory_key_store.dart";
 

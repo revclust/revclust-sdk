@@ -51,7 +51,7 @@ void defaultSdkLogger(SdkLogEntry entry) {
       entry.metadata.isEmpty ? "" : " ${jsonEncode(entry.metadata)}";
   developer.log(
     "${entry.message}$metadataSuffix",
-    name: "revclust_flutter_sdk.${entry.code}",
+    name: "revclust_flutter.${entry.code}",
     level: _developerLevel(entry.level),
     stackTrace: entry.stackTrace,
   );

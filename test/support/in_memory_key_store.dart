@@ -1,6 +1,6 @@
 import "dart:typed_data";
 
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
+import "package:revclust_flutter/src/internal/revclust_internal.dart";
 
 class InMemoryKeyStore implements KeyStore {
   Uint8List? _material;

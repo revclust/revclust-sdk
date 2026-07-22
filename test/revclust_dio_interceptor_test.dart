@@ -3,7 +3,7 @@ import "dart:typed_data";
 
 import "package:dio/dio.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
+import "package:revclust_flutter/src/internal/revclust_internal.dart";
 
 void main() {
   test("success response emits network event with expected attributes",

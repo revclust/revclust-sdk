@@ -2,7 +2,7 @@ import "dart:ui" show ErrorCallback, PlatformDispatcher;
 
 import "package:flutter/foundation.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
+import "package:revclust_flutter/src/internal/revclust_internal.dart";
 
 void main() {
   late FlutterExceptionHandler? originalFlutterHandler;

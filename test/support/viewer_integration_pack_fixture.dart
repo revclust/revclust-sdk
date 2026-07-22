@@ -1,5 +1,5 @@
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
-import "package:revclust_flutter_sdk/src/update_context/session_state_store.dart";
+import "package:revclust_flutter/src/internal/revclust_internal.dart";
+import "package:revclust_flutter/src/update_context/session_state_store.dart";
 
 const String viewerIntegrationFixtureCaptureId =
     "cap_sdk_viewer_integration_20260309";

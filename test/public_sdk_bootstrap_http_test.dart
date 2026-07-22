@@ -4,9 +4,9 @@ import "dart:typed_data";
 
 import "package:dio/dio.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart";
-import "package:revclust_flutter_sdk/src/public/revclust_config.dart";
-import "package:revclust_flutter_sdk/src/public/revclust_diagnostics.dart";
+import "package:revclust_flutter/src/public/revclust_bootstrap.dart";
+import "package:revclust_flutter/src/public/revclust_config.dart";
+import "package:revclust_flutter/src/public/revclust_diagnostics.dart";
 
 // Deliberately synthetic shape-valid test keys; never use these outside tests.
 const String _validSdkKey = "rpk_00000000000000000000000000000000";

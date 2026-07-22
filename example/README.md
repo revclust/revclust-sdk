@@ -1,7 +1,7 @@
 # Revclust Flutter SDK Example
 
 This example mirrors the current mobile setup path for
-`revclust_flutter_sdk`.
+`revclust_flutter`.
 
 It shows the minimum integration shape:
 

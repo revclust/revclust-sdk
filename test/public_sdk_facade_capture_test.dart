@@ -4,18 +4,18 @@ import "dart:io";
 import "package:dio/dio.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
+import "package:revclust_flutter/revclust_flutter.dart" as facade;
+import "package:revclust_flutter/src/internal/revclust_internal.dart"
     as low_level;
-import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart"
+import "package:revclust_flutter/src/public/revclust_bootstrap.dart"
     as bootstrap_internal;
-import "package:revclust_flutter_sdk/src/public/revclust.dart"
+import "package:revclust_flutter/src/public/revclust.dart"
     as facade_internal;
-import "package:revclust_flutter_sdk/src/public/revclust_local_capture.dart"
+import "package:revclust_flutter/src/public/revclust_local_capture.dart"
     as local_capture_internal;
-import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
+import "package:revclust_flutter/src/public/revclust_owned_upload.dart"
     as upload_internal;
-import "package:revclust_flutter_sdk/src/state/state_snapshot.dart";
+import "package:revclust_flutter/src/state/state_snapshot.dart";
 
 import "support/public_facade_local_capture_factory.dart";
 

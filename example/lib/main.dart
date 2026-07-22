@@ -1,7 +1,7 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
-import "package:revclust_flutter_sdk/revclust_flutter.dart";
+import "package:revclust_flutter/revclust_flutter.dart";
 
 const String _sdkKey = String.fromEnvironment("REVCLUST_PROJECT_KEY");
 const String _appVersion = String.fromEnvironment("REVCLUST_APP_VERSION");

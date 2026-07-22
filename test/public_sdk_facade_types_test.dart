@@ -3,17 +3,15 @@ import "dart:typed_data";
 
 import "package:dio/dio.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/revclust_flutter.dart" as facade;
-import "package:revclust_flutter_sdk/revclust_flutter_sdk.dart"
-    as compatibility;
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart"
+import "package:revclust_flutter/revclust_flutter.dart" as facade;
+import "package:revclust_flutter/src/internal/revclust_internal.dart"
     as low_level;
-import "package:revclust_flutter_sdk/src/persistence/revclust_database_factory.dart";
-import "package:revclust_flutter_sdk/src/public/revclust_bootstrap.dart"
+import "package:revclust_flutter/src/persistence/revclust_database_factory.dart";
+import "package:revclust_flutter/src/public/revclust_bootstrap.dart"
     as bootstrap_internal;
-import "package:revclust_flutter_sdk/src/public/revclust.dart"
+import "package:revclust_flutter/src/public/revclust.dart"
     as facade_internal;
-import "package:revclust_flutter_sdk/src/public/revclust_owned_upload.dart"
+import "package:revclust_flutter/src/public/revclust_owned_upload.dart"
     as upload_internal;
 
 import "support/in_memory_key_store.dart";
@@ -149,21 +147,6 @@ void main() {
       snapshot.lastErrorCode,
       facade.RevclustUploadErrorCode.transportUnavailable,
     );
-  });
-
-  test("compatibility entrypoint exposes the same SDK types", () {
-    final compatibility.RevclustInvariantFailure failure =
-        compatibility.RevclustInvariantFailure(
-      failureKind: "checkout_confirmation_mismatch",
-      subject: compatibility.RevclustSubject(
-        kind: "order_ref",
-        value: "ord_ref_7d82b1",
-      ),
-      expected: const <String, Object?>{"order_status": "confirmed"},
-      observed: const <String, Object?>{"order_status": "retrying"},
-    );
-
-    expect(failure.failureKind, "checkout_confirmation_mismatch");
   });
 
   test("invariant failure validates required factual fields", () {

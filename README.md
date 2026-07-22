@@ -1,4 +1,4 @@
-# revclust_flutter_sdk
+# revclust_flutter
 
 Flutter SDK for integrating a Flutter app with the Revclust hosted incident-capture service.
 
@@ -6,17 +6,15 @@ Revclust is a product of ASTROSCEND LIMITED.
 
 ## Install
 
-Add the SDK from the Revclust Flutter SDK repository using a pinned git tag.
+Add the SDK from pub.dev.
 
 ```yaml
 dependencies:
-  revclust_flutter_sdk:
-    git:
-      url: https://github.com/revclust/revclust-sdk.git
-      ref: v0.4.3
+  revclust_flutter: ^0.5.0
 ```
 
-Use the released tag provided by Revclust.
+If Revclust gives you a specific git tag for a preview build, pin that tag
+explicitly instead of using a moving branch.
 
 ## Requirements
 
@@ -33,7 +31,7 @@ desktop runtimes are not part of the current support boundary.
 Use the supported SDK entrypoint:
 
 ```dart
-import "package:revclust_flutter_sdk/revclust_flutter.dart";
+import "package:revclust_flutter/revclust_flutter.dart";
 ```
 
 This is the supported entrypoint for app integrations.
@@ -49,9 +47,7 @@ After adding the dependency, follow the Revclust setup docs for:
 
 ## Release Policy
 
-Revclust publishes supported releases as immutable git tags.
-
-Pin your app to a specific tag. Use a commit only when Revclust explicitly provides one. Do not install from a moving branch head.
+Revclust publishes supported SDK releases on pub.dev.
 
 ## License And Service Boundary
 

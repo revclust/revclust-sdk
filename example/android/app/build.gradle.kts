@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.revclust.revclust_flutter_sdk_example"
+    namespace = "dev.revclust.revclust_flutter_example"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // Unique application ID for the SDK example app.
-        applicationId = "dev.revclust.revclust_flutter_sdk_example"
+        applicationId = "dev.revclust.revclust_flutter_example"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

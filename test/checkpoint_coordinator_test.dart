@@ -1,15 +1,15 @@
 import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/src/capture/capture_envelope.dart";
-import "package:revclust_flutter_sdk/src/capture/capture_trigger.dart";
-import "package:revclust_flutter_sdk/src/checkpoint/checkpoint_coordinator.dart";
-import "package:revclust_flutter_sdk/src/events/timeline_event.dart";
-import "package:revclust_flutter_sdk/src/observability/sdk_logger.dart";
-import "package:revclust_flutter_sdk/src/pack/pack_build_request.dart";
-import "package:revclust_flutter_sdk/src/pack/pack_build_result.dart";
-import "package:revclust_flutter_sdk/src/pack/pack_builder.dart";
-import "package:revclust_flutter_sdk/src/update_context/session_state_store.dart";
+import "package:revclust_flutter/src/capture/capture_envelope.dart";
+import "package:revclust_flutter/src/capture/capture_trigger.dart";
+import "package:revclust_flutter/src/checkpoint/checkpoint_coordinator.dart";
+import "package:revclust_flutter/src/events/timeline_event.dart";
+import "package:revclust_flutter/src/observability/sdk_logger.dart";
+import "package:revclust_flutter/src/pack/pack_build_request.dart";
+import "package:revclust_flutter/src/pack/pack_build_result.dart";
+import "package:revclust_flutter/src/pack/pack_builder.dart";
+import "package:revclust_flutter/src/update_context/session_state_store.dart";
 
 void main() {
   group("CheckpointCoordinator", () {

@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
-import "package:revclust_flutter_sdk/src/update_context/session_state_store.dart";
+import "package:revclust_flutter/src/internal/revclust_internal.dart";
+import "package:revclust_flutter/src/update_context/session_state_store.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
 void main() {

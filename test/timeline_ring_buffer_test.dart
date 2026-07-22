@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/src/internal/revclust_internal.dart";
+import "package:revclust_flutter/src/internal/revclust_internal.dart";
 
 void main() {
   test("evicts oldest first when max events cap is exceeded", () {

@@ -1,7 +1,14 @@
-name: revclust_flutter_sdk
+name: revclust_flutter
 description: Flutter SDK for integrating a Flutter app with Revclust hosted incident capture.
-version: 0.4.3
-publish_to: "none"
+version: 0.5.0
+homepage: https://revclust.com
+repository: https://github.com/revclust/revclust-sdk
+documentation: https://revclust.com/docs
+topics:
+  - flutter
+  - debugging
+  - observability
+  - incidents
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

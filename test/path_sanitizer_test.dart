@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:revclust_flutter_sdk/src/network/path_sanitizer.dart";
+import "package:revclust_flutter/src/network/path_sanitizer.dart";
 
 void main() {
   test("strips query params and fragments", () {

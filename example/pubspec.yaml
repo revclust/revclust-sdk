@@ -1,5 +1,5 @@
-name: revclust_flutter_sdk_example
-description: "Example app for revclust_flutter_sdk."
+name: revclust_flutter_example
+description: "Example app for revclust_flutter."
 publish_to: "none"
 
 version: 1.0.0+1
@@ -12,7 +12,7 @@ dependencies:
   dio: ^5.4.3+1
   flutter:
     sdk: flutter
-  revclust_flutter_sdk:
+  revclust_flutter:
     path: ../
 
 dev_dependencies:
